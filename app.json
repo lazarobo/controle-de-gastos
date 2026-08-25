@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "controle-de-gastos",
+    "name": "Controle de Gastos",
     "slug": "controle-de-gastos",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,10 +16,24 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.lazaro.controledegastos"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-sqlite",
+      "expo-sharing"
+    ],
+    "scheme": "controledegastos",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f7966e2f-47c7-4dc6-a9de-8f6c94338c6d"
+      }
     }
   }
 }
