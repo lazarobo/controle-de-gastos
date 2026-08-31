@@ -9,17 +9,23 @@ import {
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Botao, Campo, Carregando, Chips, Rotulo, Vazio } from '../../src/components/ui';
+import { CampoValor } from '../../src/components/CampoValor';
 import * as categoriasRepo from '../../src/repos/categorias';
 import * as contasRepo from '../../src/repos/contas';
 import * as lancamentosRepo from '../../src/repos/lancamentos';
-import { formatarValor, parseMoeda } from '../../src/utils/money';
+import { formatarValor } from '../../src/utils/money';
 import { dataParaISO, formatarData, hojeISO } from '../../src/utils/date';
-import { cores, espaco } from '../../src/utils/tema';
+import { useTema } from '../../src/contexto/TemaContexto';
+import { espaco, type Paleta } from '../../src/utils/tema';
 import type { Categoria, Conta, TipoMovimento } from '../../src/types';
 
 export default function FormularioLancamento() {
+  const { cores } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const novo = id === 'novo';
   const idNumero = novo ? null : Number(id);
@@ -31,7 +37,7 @@ export default function FormularioLancamento() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
 
   const [tipo, setTipo] = useState<TipoMovimento>('despesa');
-  const [valor, setValor] = useState('');
+  const [valor, setValor] = useState(0);
   const [descricao, setDescricao] = useState('');
   const [dataTexto, setDataTexto] = useState(formatarData(hojeISO()));
   const [contaId, setContaId] = useState<number | null>(null);
@@ -69,7 +75,7 @@ export default function FormularioLancamento() {
           return;
         }
         setTipo(l.tipo);
-        setValor(formatarValor(l.valor));
+        setValor(l.valor);
         setDescricao(l.descricao);
         setDataTexto(formatarData(l.data));
         setContaId(l.conta_id);
@@ -103,8 +109,7 @@ export default function FormularioLancamento() {
   }, [categoriasDoTipo, categoriaId]);
 
   async function salvar() {
-    const centavos = parseMoeda(valor);
-    if (centavos == null || centavos <= 0) {
+    if (valor <= 0) {
       setErroValor('Informe um valor maior que zero.');
       return;
     }
@@ -132,7 +137,7 @@ export default function FormularioLancamento() {
     try {
       const dados = {
         descricao: descricaoFinal,
-        valor: centavos,
+        valor,
         tipo,
         data: dataISO,
         conta_id: contaId,
@@ -199,7 +204,10 @@ export default function FormularioLancamento() {
         style={e.tela}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={e.conteudo} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={[e.conteudo, { paddingBottom: espaco.xl + insets.bottom }]}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={e.grupo}>
             <Chips
               itens={[
@@ -211,15 +219,12 @@ export default function FormularioLancamento() {
             />
           </View>
 
-          <Campo
-            rotulo="Valor (R$)"
-            value={valor}
-            onChangeText={setValor}
-            keyboardType="decimal-pad"
-            placeholder="0,00"
+          <CampoValor
+            rotulo="Valor"
+            valor={valor}
+            onChange={setValor}
             autoFocus={novo}
             erro={erroValor}
-            style={e.inputValor}
           />
 
           <Campo
@@ -343,12 +348,13 @@ function textoParaISO(texto: string): string | null {
   return dataParaISO(d);
 }
 
-const e = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: cores.fundo },
-  conteudo: { padding: espaco.lg, paddingBottom: espaco.xl },
-  grupo: { marginBottom: espaco.lg },
-  inputValor: { fontSize: 24, fontWeight: '700' },
-  inputMultilinha: { minHeight: 80, textAlignVertical: 'top' },
-  semCategoria: { fontSize: 13, color: cores.textoFraco },
-  acoes: { gap: espaco.sm, marginTop: espaco.sm },
-});
+function criarEstilos(cores: Paleta) {
+  return StyleSheet.create({
+    tela: { flex: 1, backgroundColor: cores.fundo },
+    conteudo: { padding: espaco.lg, paddingBottom: espaco.xl },
+    grupo: { marginBottom: espaco.lg },
+    inputMultilinha: { minHeight: 80, textAlignVertical: 'top' },
+    semCategoria: { fontSize: 13, color: cores.textoFraco },
+    acoes: { gap: espaco.sm, marginTop: espaco.sm },
+  });
+}

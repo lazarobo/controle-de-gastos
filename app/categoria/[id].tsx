@@ -1,13 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Botao, Campo, Carregando, Chips, Rotulo } from '../../src/components/ui';
 import * as categoriasRepo from '../../src/repos/categorias';
-import { cores, espaco, PALETA, raio } from '../../src/utils/tema';
+import { useTema } from '../../src/contexto/TemaContexto';
+import { espaco, PALETA, raio, type Paleta } from '../../src/utils/tema';
 import type { TipoMovimento } from '../../src/types';
 
 export default function FormularioCategoria() {
+  const { cores } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
+  const insets = useSafeAreaInsets();
   const { id, tipo: tipoInicial } = useLocalSearchParams<{ id: string; tipo?: string }>();
   const nova = id === 'nova';
   const idNumero = nova ? null : Number(id);
@@ -101,7 +106,10 @@ export default function FormularioCategoria() {
   return (
     <>
       <Stack.Screen options={{ title: nova ? 'Nova categoria' : 'Editar categoria' }} />
-      <ScrollView style={e.tela} contentContainerStyle={e.conteudo}>
+      <ScrollView
+        style={e.tela}
+        contentContainerStyle={[e.conteudo, { paddingBottom: espaco.xl + insets.bottom }]}
+      >
         {sistema ? (
           <View style={e.avisoSistema}>
             <Text style={e.avisoSistemaTexto}>
@@ -161,20 +169,22 @@ export default function FormularioCategoria() {
   );
 }
 
-const e = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: cores.fundo },
-  conteudo: { padding: espaco.lg, paddingBottom: espaco.xl },
-  grupo: { marginBottom: espaco.lg },
-  ajuda: { fontSize: 14, color: cores.textoFraco },
-  avisoSistema: {
-    backgroundColor: cores.primariaFraca,
-    borderRadius: raio.sm,
-    padding: espaco.md,
-    marginBottom: espaco.lg,
-  },
-  avisoSistemaTexto: { fontSize: 13, color: cores.texto, lineHeight: 18 },
-  paleta: { flexDirection: 'row', flexWrap: 'wrap', gap: espaco.sm },
-  amostra: { width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: 'transparent' },
-  amostraAtiva: { borderColor: cores.texto },
-  acoes: { gap: espaco.sm, marginTop: espaco.lg },
-});
+function criarEstilos(cores: Paleta) {
+  return StyleSheet.create({
+    tela: { flex: 1, backgroundColor: cores.fundo },
+    conteudo: { padding: espaco.lg, paddingBottom: espaco.xl },
+    grupo: { marginBottom: espaco.lg },
+    ajuda: { fontSize: 14, color: cores.textoFraco },
+    avisoSistema: {
+      backgroundColor: cores.primariaFraca,
+      borderRadius: raio.sm,
+      padding: espaco.md,
+      marginBottom: espaco.lg,
+    },
+    avisoSistemaTexto: { fontSize: 13, color: cores.texto, lineHeight: 18 },
+    paleta: { flexDirection: 'row', flexWrap: 'wrap', gap: espaco.sm },
+    amostra: { width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: 'transparent' },
+    amostraAtiva: { borderColor: cores.texto },
+    acoes: { gap: espaco.sm, marginTop: espaco.lg },
+  });
+}

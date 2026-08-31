@@ -1,16 +1,20 @@
+import { useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 
 import { Carregando, Vazio } from '../src/components/ui';
 import { useConsulta } from '../src/hooks/useConsulta';
+import { useTema } from '../src/contexto/TemaContexto';
 import * as contasRepo from '../src/repos/contas';
 import { formatarMoeda } from '../src/utils/money';
-import { cores, espaco, raio } from '../src/utils/tema';
+import { espaco, raio, type Paleta } from '../src/utils/tema';
 import { TIPOS_CONTA } from '../src/types';
 
 const ROTULO_TIPO = Object.fromEntries(TIPOS_CONTA.map((t) => [t.valor, t.rotulo]));
 
 export default function ListaContas() {
+  const { cores } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   // Inclui inativas: esta e a unica tela onde elas podem ser reativadas.
   const { dados, carregando } = useConsulta(() => contasRepo.saldos(true));
@@ -61,23 +65,25 @@ export default function ListaContas() {
   );
 }
 
-const e = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: cores.fundo },
-  conteudo: { padding: espaco.lg },
-  novo: { color: cores.primaria, fontSize: 15, fontWeight: '700' },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: espaco.md,
-    backgroundColor: cores.superficie,
-    borderWidth: 1,
-    borderColor: cores.borda,
-    borderRadius: raio.md,
-    padding: espaco.md,
-    marginBottom: espaco.sm,
-  },
-  nome: { fontSize: 15, fontWeight: '600', color: cores.texto },
-  inativa: { color: cores.textoFraco },
-  tipo: { fontSize: 12, color: cores.textoFraco, marginTop: 2 },
-  saldo: { fontSize: 15, fontWeight: '700' },
-});
+function criarEstilos(cores: Paleta) {
+  return StyleSheet.create({
+    tela: { flex: 1, backgroundColor: cores.fundo },
+    conteudo: { padding: espaco.lg },
+    novo: { color: cores.primaria, fontSize: 15, fontWeight: '700' },
+    item: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: espaco.md,
+      backgroundColor: cores.superficie,
+      borderWidth: 1,
+      borderColor: cores.borda,
+      borderRadius: raio.md,
+      padding: espaco.md,
+      marginBottom: espaco.sm,
+    },
+    nome: { fontSize: 15, fontWeight: '600', color: cores.texto },
+    inativa: { color: cores.textoFraco },
+    tipo: { fontSize: 12, color: cores.textoFraco, marginTop: 2 },
+    saldo: { fontSize: 15, fontWeight: '700' },
+  });
+}

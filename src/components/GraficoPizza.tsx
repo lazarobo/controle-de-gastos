@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { formatarMoeda } from '../utils/money';
-import { cores, espaco } from '../utils/tema';
+import { useTema } from '../contexto/TemaContexto';
+import { espaco, type Paleta } from '../utils/tema';
 import type { TotalPorCategoria } from '../types';
 
 const TAMANHO = 200;
@@ -17,6 +19,9 @@ const CIRCUNFERENCIA = 2 * Math.PI * RAIO;
  * A rotacao de -90 graus faz a primeira fatia comecar no topo em vez das 3h.
  */
 export function GraficoPizza({ dados }: { dados: TotalPorCategoria[] }) {
+  const { cores } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
+
   const total = dados.reduce((soma, d) => soma + d.total, 0);
   if (total <= 0) return null;
 
@@ -79,24 +84,26 @@ export function GraficoPizza({ dados }: { dados: TotalPorCategoria[] }) {
   );
 }
 
-const e = StyleSheet.create({
-  container: { gap: espaco.lg },
-  rosca: { alignSelf: 'center', width: TAMANHO, height: TAMANHO, justifyContent: 'center' },
-  centro: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centroRotulo: { fontSize: 11, color: cores.textoFraco, textTransform: 'uppercase' },
-  centroValor: { fontSize: 18, fontWeight: '700', color: cores.texto },
-  legenda: { gap: espaco.sm },
-  linha: { flexDirection: 'row', alignItems: 'center', gap: espaco.sm },
-  ponto: { width: 12, height: 12, borderRadius: 6 },
-  nome: { flex: 1, fontSize: 14, color: cores.texto },
-  percentual: { fontSize: 12, color: cores.textoFraco, width: 48, textAlign: 'right' },
-  valor: { fontSize: 14, fontWeight: '600', color: cores.texto, width: 96, textAlign: 'right' },
-});
+function criarEstilos(cores: Paleta) {
+  return StyleSheet.create({
+    container: { gap: espaco.lg },
+    rosca: { alignSelf: 'center', width: TAMANHO, height: TAMANHO, justifyContent: 'center' },
+    centro: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    centroRotulo: { fontSize: 11, color: cores.textoFraco, textTransform: 'uppercase' },
+    centroValor: { fontSize: 18, fontWeight: '700', color: cores.texto },
+    legenda: { gap: espaco.sm },
+    linha: { flexDirection: 'row', alignItems: 'center', gap: espaco.sm },
+    ponto: { width: 12, height: 12, borderRadius: 6 },
+    nome: { flex: 1, fontSize: 14, color: cores.texto },
+    percentual: { fontSize: 12, color: cores.textoFraco, width: 48, textAlign: 'right' },
+    valor: { fontSize: 14, fontWeight: '600', color: cores.texto, width: 96, textAlign: 'right' },
+  });
+}

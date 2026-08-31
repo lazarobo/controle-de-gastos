@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 
 import { SeletorMes } from '../../src/components/SeletorMes';
 import { Cartao, Carregando, Titulo, Vazio } from '../../src/components/ui';
 import { useConsulta } from '../../src/hooks/useConsulta';
+import { useTema } from '../../src/contexto/TemaContexto';
 import * as contasRepo from '../../src/repos/contas';
 import * as lancamentosRepo from '../../src/repos/lancamentos';
 import { formatarMoeda } from '../../src/utils/money';
 import { mesAtual, type Mes } from '../../src/utils/date';
-import { cores, espaco, raio } from '../../src/utils/tema';
+import { espaco, raio, type Paleta } from '../../src/utils/tema';
 import type { ResumoMes, SaldoConta } from '../../src/types';
 
 interface DadosPainel {
@@ -19,6 +20,8 @@ interface DadosPainel {
 }
 
 export default function Painel() {
+  const { cores } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
   const [mes, setMes] = useState<Mes>(mesAtual);
   const router = useRouter();
 
@@ -122,6 +125,8 @@ export default function Painel() {
 }
 
 function Kpi({ rotulo, valor, cor }: { rotulo: string; valor: number; cor: string }) {
+  const { cores } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
   return (
     <Cartao style={e.kpi}>
       <Text style={e.rotuloSaldo}>{rotulo}</Text>
@@ -130,44 +135,46 @@ function Kpi({ rotulo, valor, cor }: { rotulo: string; valor: number; cor: strin
   );
 }
 
-const e = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: cores.fundo },
-  conteudo: { padding: espaco.lg, gap: espaco.md, paddingBottom: 96 },
-  rotuloSaldo: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: cores.textoFraco,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  saldoTotal: { fontSize: 30, fontWeight: '800', color: cores.texto, marginTop: espaco.xs },
-  grade: { flexDirection: 'row', gap: espaco.md },
-  kpi: { flex: 1 },
-  valorKpi: { fontSize: 19, fontWeight: '700', marginTop: espaco.xs },
-  resultado: { fontSize: 24, fontWeight: '800', marginTop: espaco.xs },
-  explicacao: { fontSize: 11, color: cores.textoFraco, marginTop: 2 },
-  linhaConta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: espaco.md,
-    borderTopWidth: 1,
-    borderTopColor: cores.borda,
-    gap: espaco.md,
-  },
-  nomeConta: { flex: 1, fontSize: 15, color: cores.texto },
-  valorConta: { fontSize: 15, fontWeight: '700' },
-  fab: {
-    position: 'absolute',
-    right: espaco.lg,
-    bottom: espaco.lg,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: cores.primaria,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-  },
-  fabTexto: { color: '#FFF', fontSize: 34, lineHeight: 38, fontWeight: '300' },
-});
+function criarEstilos(cores: Paleta) {
+  return StyleSheet.create({
+    tela: { flex: 1, backgroundColor: cores.fundo },
+    conteudo: { padding: espaco.lg, gap: espaco.md, paddingBottom: 96 },
+    rotuloSaldo: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: cores.textoFraco,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    saldoTotal: { fontSize: 30, fontWeight: '800', color: cores.texto, marginTop: espaco.xs },
+    grade: { flexDirection: 'row', gap: espaco.md },
+    kpi: { flex: 1 },
+    valorKpi: { fontSize: 19, fontWeight: '700', marginTop: espaco.xs },
+    resultado: { fontSize: 24, fontWeight: '800', marginTop: espaco.xs },
+    explicacao: { fontSize: 11, color: cores.textoFraco, marginTop: 2 },
+    linhaConta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: espaco.md,
+      borderTopWidth: 1,
+      borderTopColor: cores.borda,
+      gap: espaco.md,
+    },
+    nomeConta: { flex: 1, fontSize: 15, color: cores.texto },
+    valorConta: { fontSize: 15, fontWeight: '700' },
+    fab: {
+      position: 'absolute',
+      right: espaco.lg,
+      bottom: espaco.lg,
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: cores.primaria,
+      alignItems: 'center',
+      justifyContent: 'center',
+      elevation: 6,
+    },
+    fabTexto: { color: '#FFF', fontSize: 34, lineHeight: 38, fontWeight: '300' },
+  });
+}

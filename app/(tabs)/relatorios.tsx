@@ -1,16 +1,19 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { GraficoPizza } from '../../src/components/GraficoPizza';
 import { SeletorMes } from '../../src/components/SeletorMes';
 import { Cartao, Carregando, Chips, Titulo, Vazio } from '../../src/components/ui';
 import { useConsulta } from '../../src/hooks/useConsulta';
+import { useTema } from '../../src/contexto/TemaContexto';
 import * as lancamentosRepo from '../../src/repos/lancamentos';
 import { mesAtual, type Mes } from '../../src/utils/date';
-import { cores, espaco } from '../../src/utils/tema';
+import { espaco, type Paleta } from '../../src/utils/tema';
 import type { TipoMovimento } from '../../src/types';
 
 export default function Relatorios() {
+  const { cores } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
   const [mes, setMes] = useState<Mes>(mesAtual);
   const [tipo, setTipo] = useState<TipoMovimento>('despesa');
 
@@ -53,8 +56,10 @@ export default function Relatorios() {
   );
 }
 
-const e = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: cores.fundo },
-  conteudo: { padding: espaco.lg, gap: espaco.md, paddingBottom: espaco.xl },
-  grafico: { marginTop: espaco.md },
-});
+function criarEstilos(cores: Paleta) {
+  return StyleSheet.create({
+    tela: { flex: 1, backgroundColor: cores.fundo },
+    conteudo: { padding: espaco.lg, gap: espaco.md, paddingBottom: espaco.xl },
+    grafico: { marginTop: espaco.md },
+  });
+}

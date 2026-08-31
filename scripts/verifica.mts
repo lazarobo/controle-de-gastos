@@ -132,6 +132,8 @@ db.exec('PRAGMA foreign_keys = ON');
 
 const schema = sqlDoArquivo('src/db/migrations.ts', 'CREATE TABLE contas');
 db.exec(schema);
+const schemaPreferencias = sqlDoArquivo('src/db/migrations.ts', 'CREATE TABLE preferencias');
+db.exec(schemaPreferencias);
 
 teste('schema cria as tres tabelas e os indices', () => {
   const nomes = db
@@ -141,12 +143,36 @@ teste('schema cria as tres tabelas e os indices', () => {
   assert.ok(nomes.includes('contas'));
   assert.ok(nomes.includes('categorias'));
   assert.ok(nomes.includes('lancamentos'));
+  assert.ok(nomes.includes('preferencias'));
 
   const indices = db
     .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%'")
     .all()
     .map((l: any) => l.name);
   assert.ok(indices.includes('idx_lanc_data_tipo'), 'falta o indice composto (data, tipo)');
+});
+
+teste('preferencias: SELECT do repo retorna null quando nao ha valor salvo', () => {
+  const sqlSelect = sqlDoArquivo('src/repos/preferencias.ts', 'FROM preferencias');
+  const r: any = db.prepare(sqlSelect).get('tema');
+  assert.equal(r, undefined);
+});
+
+teste('preferencias: INSERT ... ON CONFLICT grava e depois atualiza (upsert real)', () => {
+  const sqlUpsert = sqlDoArquivo('src/repos/preferencias.ts', 'ON CONFLICT');
+  const sqlSelect = sqlDoArquivo('src/repos/preferencias.ts', 'FROM preferencias');
+
+  db.prepare(sqlUpsert).run('tema', 'escuro');
+  let r: any = db.prepare(sqlSelect).get('tema');
+  assert.equal(r.valor, 'escuro');
+
+  // Upsert de novo com a MESMA chave tem de trocar o valor, nao duplicar linha.
+  db.prepare(sqlUpsert).run('tema', 'claro');
+  r = db.prepare(sqlSelect).get('tema');
+  assert.equal(r.valor, 'claro');
+
+  const total: any = db.prepare('SELECT COUNT(*) AS n FROM preferencias').get();
+  assert.equal(total.n, 1);
 });
 
 teste('CHECK barra valor zero ou negativo', () => {
@@ -282,6 +308,42 @@ teste('ON DELETE SET NULL preserva o lancamento e o total', () => {
   assert.ok(
     linhas.some((l) => l.categoria_nome === 'Sem categoria' && l.total === 3750),
     'o gasto orfao tem de aparecer como "Sem categoria" na pizza',
+  );
+});
+
+const schemaInvestimentos = sqlDoArquivo('src/db/migrations.ts', 'CREATE TABLE investimentos');
+db.exec(schemaInvestimentos);
+
+teste('investimentos: CHECK barra valor negativo', () => {
+  assert.throws(() =>
+    db.exec("INSERT INTO investimentos (nome, valor) VALUES ('XP', -100)"),
+  );
+});
+
+teste('investimentos: total() soma tudo em centavos', () => {
+  db.exec(`
+    INSERT INTO investimentos (nome, valor) VALUES
+      ('XP', 150000),
+      ('Nubank', 50000);
+  `);
+  const sqlTotal = sqlDoArquivo('src/repos/investimentos.ts', 'SUM(valor)');
+  const r: any = db.prepare(sqlTotal).get();
+  assert.equal(r.total, 200000); // R$ 1.500,00 + R$ 500,00
+});
+
+teste('investimentos: NAO entra no saldo total das contas (isolamento exigido pelo usuario)', () => {
+  const sqlSaldoTotal = sqlDoArquivo('src/repos/contas.ts', 'AS total');
+  const antes: any = db.prepare(sqlSaldoTotal).get();
+
+  // Mais um investimento grande, so pra garantir que mexeria no total SE houvesse
+  // qualquer join ou referencia cruzada entre as duas tabelas.
+  db.exec("INSERT INTO investimentos (nome, valor) VALUES ('Rico', 999999900)");
+
+  const depois: any = db.prepare(sqlSaldoTotal).get();
+  assert.equal(
+    depois.total,
+    antes.total,
+    'saldoTotal() de contas.ts mudou depois de inserir em investimentos — nao deveria haver relacao nenhuma',
   );
 });
 

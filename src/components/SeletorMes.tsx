@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatarMes, mesAtual, mesesIguais, somarMeses, type Mes } from '../utils/date';
-import { cores, espaco, raio } from '../utils/tema';
+import { useTema } from '../contexto/TemaContexto';
+import { espaco, raio, type Paleta } from '../utils/tema';
 
 export function SeletorMes({
   mes,
@@ -9,6 +11,8 @@ export function SeletorMes({
   mes: Mes;
   onChange: (m: Mes) => void;
 }) {
+  const { cores } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
   const hoje = mesAtual();
   const noMesAtual = mesesIguais(mes, hoje);
 
@@ -38,21 +42,23 @@ export function SeletorMes({
   );
 }
 
-const e = StyleSheet.create({
-  barra: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: cores.superficie,
-    borderRadius: raio.md,
-    borderWidth: 1,
-    borderColor: cores.borda,
-    paddingHorizontal: espaco.sm,
-    paddingVertical: espaco.sm,
-  },
-  seta: { paddingHorizontal: espaco.md, paddingVertical: espaco.xs },
-  setaTexto: { fontSize: 26, lineHeight: 30, color: cores.primaria, fontWeight: '700' },
-  centro: { flex: 1, alignItems: 'center' },
-  mes: { fontSize: 16, fontWeight: '700', color: cores.texto, textTransform: 'capitalize' },
-  voltar: { fontSize: 11, color: cores.primaria, marginTop: 2 },
-});
+function criarEstilos(cores: Paleta) {
+  return StyleSheet.create({
+    barra: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: cores.superficie,
+      borderRadius: raio.md,
+      borderWidth: 1,
+      borderColor: cores.borda,
+      paddingHorizontal: espaco.sm,
+      paddingVertical: espaco.sm,
+    },
+    seta: { paddingHorizontal: espaco.md, paddingVertical: espaco.xs },
+    setaTexto: { fontSize: 26, lineHeight: 30, color: cores.primaria, fontWeight: '700' },
+    centro: { flex: 1, alignItems: 'center' },
+    mes: { fontSize: 16, fontWeight: '700', color: cores.texto, textTransform: 'capitalize' },
+    voltar: { fontSize: 11, color: cores.primaria, marginTop: 2 },
+  });
+}
