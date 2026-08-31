@@ -1,14 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Botao, Campo, Carregando, Chips, Rotulo } from '../../src/components/ui';
 import * as contasRepo from '../../src/repos/contas';
 import { formatarValor, parseMoeda } from '../../src/utils/money';
-import { cores, espaco } from '../../src/utils/tema';
+import { useTema } from '../../src/contexto/TemaContexto';
+import { espaco, type Paleta } from '../../src/utils/tema';
 import { TIPOS_CONTA, type TipoConta } from '../../src/types';
 
 export default function FormularioConta() {
+  const { cores } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const nova = id === 'nova';
   const idNumero = nova ? null : Number(id);
@@ -138,7 +143,10 @@ export default function FormularioConta() {
   return (
     <>
       <Stack.Screen options={{ title: nova ? 'Nova conta' : 'Editar conta' }} />
-      <ScrollView style={e.tela} contentContainerStyle={e.conteudo}>
+      <ScrollView
+        style={e.tela}
+        contentContainerStyle={[e.conteudo, { paddingBottom: espaco.xl + insets.bottom }]}
+      >
         <Campo
           rotulo="Nome"
           value={nome}
@@ -193,11 +201,13 @@ export default function FormularioConta() {
   );
 }
 
-const e = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: cores.fundo },
-  conteudo: { padding: espaco.lg, paddingBottom: espaco.xl },
-  grupo: { marginBottom: espaco.lg },
-  ajuda: { fontSize: 12, color: cores.textoFraco, marginTop: -espaco.sm, marginBottom: espaco.lg },
-  linhaSwitch: { flexDirection: 'row', alignItems: 'center', gap: espaco.md },
-  acoes: { gap: espaco.sm, marginTop: espaco.lg },
-});
+function criarEstilos(cores: Paleta) {
+  return StyleSheet.create({
+    tela: { flex: 1, backgroundColor: cores.fundo },
+    conteudo: { padding: espaco.lg, paddingBottom: espaco.xl },
+    grupo: { marginBottom: espaco.lg },
+    ajuda: { fontSize: 12, color: cores.textoFraco, marginTop: -espaco.sm, marginBottom: espaco.lg },
+    linhaSwitch: { flexDirection: 'row', alignItems: 'center', gap: espaco.md },
+    acoes: { gap: espaco.sm, marginTop: espaco.lg },
+  });
+}

@@ -64,6 +64,43 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_lanc_conta     ON lancamentos(conta_id);
     `,
   },
+  {
+    versao: 2,
+    nome: 'preferencias',
+    sql: `
+      -- Chave-valor genérico para configurações do app (hoje só o tema).
+      -- Uma tabela para todas as preferências evita nova migration a cada
+      -- opção nova de configuração.
+      CREATE TABLE preferencias (
+        chave TEXT PRIMARY KEY,
+        valor TEXT NOT NULL
+      );
+    `,
+  },
+  {
+    versao: 3,
+    nome: 'investimentos',
+    sql: `
+      -- Deliberadamente SEM referencia a contas: investimento nao e conta e
+      -- nao entra no saldo total do dashboard (RF05). O valor nao vem de
+      -- lancamentos (receita/despesa) como em D03 -- ele e digitado direto
+      -- pelo usuario cada vez que confere o extrato da corretora/banco,
+      -- porque render/queda de investimento nao e um "gasto" nem uma "receita"
+      -- no sentido do resto do app.
+      CREATE TABLE investimentos (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        -- Nome do banco/corretora, ex: "XP", "Nubank", "Rico".
+        nome          TEXT    NOT NULL,
+        -- Centavos. Saldo atual investido, informado manualmente pelo usuario.
+        valor         INTEGER NOT NULL CHECK (valor >= 0),
+        observacao    TEXT,
+        criado_em     TEXT    NOT NULL DEFAULT (datetime('now')),
+        -- Distinto de criado_em: atualizado toda vez que o usuario confere e
+        -- reajusta o valor, para a tela mostrar ha quanto tempo isso ocorreu.
+        atualizado_em TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+    `,
+  },
 ];
 
 export const VERSAO_ALVO = MIGRATIONS.reduce((max, m) => Math.max(max, m.versao), 0);

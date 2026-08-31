@@ -5,7 +5,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { obterDb } from '../db';
 import { VERSAO_ALVO } from '../db/migrations';
 import { dataParaISO } from '../utils/date';
-import type { Categoria, Conta, Lancamento } from '../types';
+import type { Categoria, Conta, Investimento, Lancamento } from '../types';
 
 export const FORMATO_BACKUP = 'controle-de-gastos-backup';
 
@@ -22,6 +22,8 @@ export interface ArquivoBackup {
   contas: Conta[];
   categorias: Categoria[];
   lancamentos: Lancamento[];
+  /** Ausente em backups gerados antes da migration 3; tratado como []. */
+  investimentos?: Investimento[];
 }
 
 export interface ResultadoExportacao {
@@ -32,10 +34,11 @@ export interface ResultadoExportacao {
 
 export async function montarBackup(): Promise<ArquivoBackup> {
   const db = await obterDb();
-  const [contas, categorias, lancamentos] = await Promise.all([
+  const [contas, categorias, lancamentos, investimentos] = await Promise.all([
     db.getAllAsync<Conta>('SELECT * FROM contas ORDER BY id'),
     db.getAllAsync<Categoria>('SELECT * FROM categorias ORDER BY id'),
     db.getAllAsync<Lancamento>('SELECT * FROM lancamentos ORDER BY id'),
+    db.getAllAsync<Investimento>('SELECT * FROM investimentos ORDER BY id'),
   ]);
 
   return {
@@ -45,6 +48,7 @@ export async function montarBackup(): Promise<ArquivoBackup> {
     contas,
     categorias,
     lancamentos,
+    investimentos,
   };
 }
 
@@ -77,6 +81,7 @@ export interface ResultadoImportacao {
   contas: number;
   categorias: number;
   lancamentos: number;
+  investimentos: number;
 }
 
 /**
@@ -95,7 +100,7 @@ export async function importar(): Promise<ResultadoImportacao> {
   });
 
   if (escolha.canceled || !escolha.assets?.length) {
-    return { cancelado: true, contas: 0, categorias: 0, lancamentos: 0 };
+    return { cancelado: true, contas: 0, categorias: 0, lancamentos: 0, investimentos: 0 };
   }
 
   const conteudo = await new File(escolha.assets[0].uri).text();
@@ -104,10 +109,11 @@ export async function importar(): Promise<ResultadoImportacao> {
   const db = await obterDb();
   await db.withTransactionAsync(async () => {
     // Ordem obrigatoria: lancamentos primeiro, senao ON DELETE RESTRICT das contas
-    // aborta a limpeza.
+    // aborta a limpeza. investimentos nao tem FK com nada, a ordem dele nao importa.
     await db.runAsync('DELETE FROM lancamentos');
     await db.runAsync('DELETE FROM contas');
     await db.runAsync('DELETE FROM categorias');
+    await db.runAsync('DELETE FROM investimentos');
 
     for (const c of backup.contas) {
       await db.runAsync(
@@ -135,6 +141,16 @@ export async function importar(): Promise<ResultadoImportacao> {
         l.criado_em ?? new Date().toISOString(),
       );
     }
+
+    for (const i of backup.investimentos ?? []) {
+      await db.runAsync(
+        `INSERT INTO investimentos (id, nome, valor, observacao, criado_em, atualizado_em)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        i.id, i.nome, i.valor, i.observacao ?? null,
+        i.criado_em ?? new Date().toISOString(),
+        i.atualizado_em ?? new Date().toISOString(),
+      );
+    }
   });
 
   return {
@@ -142,6 +158,7 @@ export async function importar(): Promise<ResultadoImportacao> {
     contas: backup.contas.length,
     categorias: backup.categorias.length,
     lancamentos: backup.lancamentos.length,
+    investimentos: backup.investimentos?.length ?? 0,
   };
 }
 
@@ -176,6 +193,13 @@ function validar(conteudo: string): ArquivoBackup {
 
   if (!Array.isArray(b.contas) || !Array.isArray(b.categorias) || !Array.isArray(b.lancamentos)) {
     return erro('O backup está incompleto: faltam contas, categorias ou lançamentos.');
+  }
+
+  // Ausente = backup de antes da migration 3 (investimentos nao existia). Nao e
+  // erro, so nao havia o que exportar; b.investimentos fica undefined e o resto
+  // do fluxo trata como lista vazia.
+  if (b.investimentos !== undefined && !Array.isArray(b.investimentos)) {
+    return erro('O backup está corrompido: o campo de investimentos não é uma lista.');
   }
 
   const idsContas = new Set(b.contas.map((c) => c.id));

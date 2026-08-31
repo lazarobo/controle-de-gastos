@@ -97,6 +97,7 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 | **D09** | **Integridade referencial** | `PRAGMA foreign_keys = ON` em toda abertura de conexão — é OFF por padrão no SQLite e vale por conexão. Sem isso as FKs do schema seriam decorativas. |
 | **D10** | **Exclusão** | Conta com lançamentos: `ON DELETE RESTRICT`, e a UI oferece inativar. Categoria: `ON DELETE SET NULL` — o gasto vira "Sem categoria" e os totais continuam batendo. |
 | **D11** | **Categorias de sistema** | "Ajuste de saldo" nasce com `sistema = 1`: só a cor é editável. Ela sustenta D04; se o usuário pudesse excluí-la, perderia o único caminho previsto para corrigir divergência. |
+| **D12** | **Investimentos** | Tabela própria (`investimentos`), sem FK com `contas`, fora de toda query de saldo. Valor é digitado manualmente pelo usuário a cada conferência de extrato — investimento rende/cai sozinho, não é gerado por lançamento (receita/despesa) como em D03. Pedido explícito do usuário: "não vai contar pro saldo". |
 
 ---
 
@@ -115,6 +116,7 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 - [x] **RF14** — Exportar backup em JSON *(promovido de v2 — sem servidor, é a única rede de proteção)*
 - [x] **RF16** — Importar backup JSON *(promovido de v2 — backup que não restaura é só um arquivo)*
 - [x] **RF17** — Registro rápido: FAB → formulário já preenchido com hoje, despesa e última conta usada *(novo: transforma o RNF02 em feature, não em boa intenção)*
+- [x] **RF18** — Cadastro de investimentos (banco/corretora + valor), com total geral. Fora do dashboard e do saldo total (D12) — tela própria em Ajustes › Investimentos
 
 ### v2 — evolução (congelado até a Fase 7)
 
@@ -145,19 +147,32 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 Fonte de verdade: [`src/db/migrations.ts`](src/db/migrations.ts). Resumo:
 
 ```sql
-contas       (id, nome, tipo, saldo_inicial INTEGER, ativo, criado_em)
-categorias   (id, nome, tipo, cor, sistema)          -- UNIQUE (nome, tipo)
-lancamentos  (id, descricao, valor INTEGER, tipo, data,
-              conta_id     REFERENCES contas(id)      ON DELETE RESTRICT,
-              categoria_id REFERENCES categorias(id)  ON DELETE SET NULL,
-              observacao, criado_em)
+-- migration 1
+contas        (id, nome, tipo, saldo_inicial INTEGER, ativo, criado_em)
+categorias    (id, nome, tipo, cor, sistema)          -- UNIQUE (nome, tipo)
+lancamentos   (id, descricao, valor INTEGER, tipo, data,
+               conta_id     REFERENCES contas(id)      ON DELETE RESTRICT,
+               categoria_id REFERENCES categorias(id)  ON DELETE SET NULL,
+               observacao, criado_em)
+
+-- migration 2
+preferencias  (chave TEXT PRIMARY KEY, valor TEXT)     -- hoje só guarda o tema
+
+-- migration 3
+investimentos (id, nome, valor INTEGER, observacao, criado_em, atualizado_em)
+              -- SEM FK com contas (D12) -- de proposito, nao entra em saldo nenhum
 ```
 
 Índices: `(data)`, `(data, tipo)`, `(categoria_id)`, `(conta_id)`.
 O composto `(data, tipo)` existe porque **toda** consulta do dashboard filtra pelos dois.
 
-`CHECK` no banco garante o que a UI promete: `valor > 0`, `tipo` dentro do domínio,
-`ativo` e `sistema` booleanos.
+`CHECK` no banco garante o que a UI promete: `valor > 0` em lançamentos (`valor >= 0`
+em investimentos, que aceita zero), `tipo` dentro do domínio, `ativo` e `sistema`
+booleanos.
+
+`user_version` atual: **3**. Backup (RF14/16) inclui as três tabelas; um backup
+exportado antes da migration 3 não tem `investimentos` no JSON — a importação trata
+isso como lista vazia, não como erro.
 
 ---
 

@@ -1,25 +1,42 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { obterDb } from '../src/db';
-import { cores, espaco } from '../src/utils/tema';
+import { TemaProvider, useTema } from '../src/contexto/TemaContexto';
+import { espaco, type Paleta } from '../src/utils/tema';
 
 /**
  * O banco abre (e migra, e semeia) uma unica vez aqui, antes de qualquer tela
  * montar. Sem essa barreira as telas correriam para consultar tabelas que ainda
  * nao existem na primeira execucao.
+ *
+ * TemaProvider fica FORA do gate de carregamento, envolvendo até a tela de
+ * loading/erro — sem isso a primeira tela apareceria sempre clara e só
+ * escureceria depois que o banco abrisse, um flash branco visível no modo
+ * escuro.
  */
 export default function LayoutRaiz() {
+  return (
+    <TemaProvider>
+      <ConteudoRaiz />
+    </TemaProvider>
+  );
+}
+
+function ConteudoRaiz() {
+  const { cores, escuro } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
+
   const [pronto, setPronto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     obterDb()
       .then(() => setPronto(true))
-      .catch((e: unknown) => setErro(e instanceof Error ? e.message : String(e)));
+      .catch((err: unknown) => setErro(err instanceof Error ? err.message : String(err)));
   }, []);
 
   if (erro) {
@@ -41,7 +58,7 @@ export default function LayoutRaiz() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
+      <StatusBar style={escuro ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: cores.superficie },
@@ -54,22 +71,26 @@ export default function LayoutRaiz() {
         <Stack.Screen name="lancamento/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="conta/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="categoria/[id]" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="investimento/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="contas" options={{ title: 'Contas' }} />
         <Stack.Screen name="categorias" options={{ title: 'Categorias' }} />
+        <Stack.Screen name="investimentos" options={{ title: 'Investimentos' }} />
       </Stack>
     </SafeAreaProvider>
   );
 }
 
-const e = StyleSheet.create({
-  centro: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: espaco.xl,
-    gap: espaco.sm,
-    backgroundColor: cores.fundo,
-  },
-  tituloErro: { fontSize: 16, fontWeight: '700', color: cores.texto, textAlign: 'center' },
-  detalheErro: { fontSize: 13, color: cores.textoFraco, textAlign: 'center' },
-});
+function criarEstilos(cores: Paleta) {
+  return StyleSheet.create({
+    centro: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: espaco.xl,
+      gap: espaco.sm,
+      backgroundColor: cores.fundo,
+    },
+    tituloErro: { fontSize: 16, fontWeight: '700', color: cores.texto, textAlign: 'center' },
+    detalheErro: { fontSize: 13, color: cores.textoFraco, textAlign: 'center' },
+  });
+}

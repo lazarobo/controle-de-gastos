@@ -62,6 +62,22 @@ export interface TotalPorCategoria {
   total: number;
 }
 
+/**
+ * Separado de Conta de proposito: nao entra no saldo total do dashboard (RF05)
+ * e o valor nao vem de lancamentos -- e digitado manualmente cada vez que o
+ * usuario confere o extrato do banco/corretora.
+ */
+export interface Investimento {
+  id: number;
+  /** Nome do banco/corretora. */
+  nome: string;
+  /** Centavos. */
+  valor: number;
+  observacao: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
 export const TIPOS_CONTA: { valor: TipoConta; rotulo: string }[] = [
   { valor: 'corrente', rotulo: 'Conta corrente' },
   { valor: 'poupanca', rotulo: 'Poupança' },

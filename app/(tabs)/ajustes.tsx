@@ -1,14 +1,23 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { Botao, Cartao, Titulo } from '../../src/components/ui';
+import { Botao, Cartao, Chips, Rotulo, Titulo } from '../../src/components/ui';
 import * as backup from '../../src/repos/backup';
 import { NOME_BANCO } from '../../src/db';
 import { VERSAO_ALVO } from '../../src/db/migrations';
-import { cores, espaco, raio } from '../../src/utils/tema';
+import { useTema, type ModoTema } from '../../src/contexto/TemaContexto';
+import { espaco, raio, type Paleta } from '../../src/utils/tema';
+
+const OPCOES_TEMA: { valor: ModoTema; rotulo: string }[] = [
+  { valor: 'claro', rotulo: 'Claro' },
+  { valor: 'escuro', rotulo: 'Escuro' },
+  { valor: 'sistema', rotulo: 'Automático' },
+];
 
 export default function Ajustes() {
+  const { cores, modo, definirModo } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [exportando, setExportando] = useState(false);
   const [importando, setImportando] = useState(false);
@@ -48,7 +57,8 @@ export default function Ajustes() {
       if (r.cancelado) return;
       Alert.alert(
         'Backup restaurado',
-        `${r.contas} conta(s), ${r.categorias} categoria(s) e ${r.lancamentos} lançamento(s) importados.`,
+        `${r.contas} conta(s), ${r.categorias} categoria(s), ${r.lancamentos} lançamento(s) e ` +
+          `${r.investimentos} investimento(s) importados.`,
       );
     } catch (erro) {
       Alert.alert('Erro ao restaurar', mensagem(erro));
@@ -67,6 +77,21 @@ export default function Ajustes() {
           detalhe="Em que o dinheiro é gasto"
           onPress={() => router.push('/categorias')}
         />
+        <Item
+          rotulo="Investimentos"
+          detalhe="Quanto está investido em cada banco"
+          onPress={() => router.push('/investimentos')}
+        />
+      </Cartao>
+
+      <Cartao>
+        <Titulo>Aparência</Titulo>
+        <Rotulo>Tema</Rotulo>
+        <Chips itens={OPCOES_TEMA} valor={modo} onChange={definirModo} />
+        <Text style={e.ajuda}>
+          "Automático" segue o tema claro/escuro que você já configurou no Android.
+          Também dá para alternar rápido pelo ☀/☾ no topo de qualquer aba.
+        </Text>
       </Cartao>
 
       <Cartao>
@@ -105,6 +130,8 @@ function Item({
   detalhe: string;
   onPress: () => void;
 }) {
+  const { cores } = useTema();
+  const e = useMemo(() => criarEstilos(cores), [cores]);
   return (
     <Pressable style={e.item} onPress={onPress}>
       <View style={{ flex: 1 }}>
@@ -120,20 +147,23 @@ function mensagem(erro: unknown): string {
   return erro instanceof Error ? erro.message : String(erro);
 }
 
-const e = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: cores.fundo },
-  conteudo: { padding: espaco.lg, gap: espaco.md, paddingBottom: espaco.xl },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: espaco.md,
-    borderTopWidth: 1,
-    borderTopColor: cores.borda,
-  },
-  itemRotulo: { fontSize: 15, fontWeight: '600', color: cores.texto },
-  itemDetalhe: { fontSize: 12, color: cores.textoFraco, marginTop: 2 },
-  seta: { fontSize: 24, color: cores.textoFraco },
-  aviso: { fontSize: 13, color: cores.textoFraco, marginBottom: espaco.md },
-  acoes: { gap: espaco.sm },
-  meta: { fontSize: 12, color: cores.textoFraco, marginTop: 2 },
-});
+function criarEstilos(cores: Paleta) {
+  return StyleSheet.create({
+    tela: { flex: 1, backgroundColor: cores.fundo },
+    conteudo: { padding: espaco.lg, gap: espaco.md, paddingBottom: espaco.xl },
+    item: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: espaco.md,
+      borderTopWidth: 1,
+      borderTopColor: cores.borda,
+    },
+    itemRotulo: { fontSize: 15, fontWeight: '600', color: cores.texto },
+    itemDetalhe: { fontSize: 12, color: cores.textoFraco, marginTop: 2 },
+    seta: { fontSize: 24, color: cores.textoFraco },
+    aviso: { fontSize: 13, color: cores.textoFraco, marginBottom: espaco.md },
+    ajuda: { fontSize: 12, color: cores.textoFraco, marginTop: espaco.sm },
+    acoes: { gap: espaco.sm },
+    meta: { fontSize: 12, color: cores.textoFraco, marginTop: 2 },
+  });
+}
