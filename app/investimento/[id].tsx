@@ -3,11 +3,12 @@ import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Botao, Campo, Carregando } from '../../src/components/ui';
+import { Botao, Campo, Carregando, Rotulo } from '../../src/components/ui';
+import { SeletorCor } from '../../src/components/SeletorCor';
 import { CampoValor } from '../../src/components/CampoValor';
 import * as investimentosRepo from '../../src/repos/investimentos';
 import { useTema } from '../../src/contexto/TemaContexto';
-import { espaco, type Paleta } from '../../src/utils/tema';
+import { espaco, PALETA, type Paleta } from '../../src/utils/tema';
 
 export default function FormularioInvestimento() {
   const { cores } = useTema();
@@ -23,6 +24,7 @@ export default function FormularioInvestimento() {
   const [nome, setNome] = useState('');
   const [valor, setValor] = useState(0);
   const [observacao, setObservacao] = useState('');
+  const [cor, setCor] = useState(PALETA[18]);
   const [erroNome, setErroNome] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ export default function FormularioInvestimento() {
         setNome(i.nome);
         setValor(i.valor);
         setObservacao(i.observacao ?? '');
+        setCor(i.cor);
       }
       setCarregando(false);
     });
@@ -55,6 +58,7 @@ export default function FormularioInvestimento() {
       nome,
       valor,
       observacao: observacao.trim() || null,
+      cor,
     };
 
     setSalvando(true);
@@ -121,6 +125,11 @@ export default function FormularioInvestimento() {
           style={e.inputMultilinha}
         />
 
+        <View style={e.grupo}>
+          <Rotulo>Cor no gráfico</Rotulo>
+          <SeletorCor cor={cor} onChange={setCor} />
+        </View>
+
         <Text style={e.ajuda}>
           Este valor não vem de lançamento nenhum — atualize aqui sempre que conferir
           o extrato. Investimentos não entram no saldo total do início.
@@ -142,6 +151,7 @@ function criarEstilos(cores: Paleta) {
     tela: { flex: 1, backgroundColor: cores.fundo },
     conteudo: { padding: espaco.lg },
     inputMultilinha: { minHeight: 80, textAlignVertical: 'top' },
+    grupo: { marginBottom: espaco.lg },
     ajuda: { fontSize: 12, color: cores.textoFraco, marginTop: -espaco.sm, marginBottom: espaco.lg },
     acoes: { gap: espaco.sm },
   });

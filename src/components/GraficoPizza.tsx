@@ -4,7 +4,7 @@ import Svg, { Circle, G } from 'react-native-svg';
 import { formatarMoeda } from '../utils/money';
 import { useTema } from '../contexto/TemaContexto';
 import { espaco, type Paleta } from '../utils/tema';
-import type { TotalPorCategoria } from '../types';
+import type { FatiaGrafico } from '../types';
 
 const TAMANHO = 200;
 const ESPESSURA = 34;
@@ -14,11 +14,15 @@ const CIRCUNFERENCIA = 2 * Math.PI * RAIO;
 /**
  * Rosca desenhada com react-native-svg em vez de uma biblioteca de graficos.
  *
+ * Recebe FatiaGrafico (nome/cor/total) em vez de um tipo especifico: assim a
+ * mesma rosca serve despesas por categoria, receitas por categoria e
+ * investimentos por banco, sem uma copia por entidade.
+ *
  * Cada fatia e um circulo completo com `strokeDasharray` cortando o traco no
  * comprimento do arco e `strokeDashoffset` empurrando-o ate o angulo inicial.
  * A rotacao de -90 graus faz a primeira fatia comecar no topo em vez das 3h.
  */
-export function GraficoPizza({ dados }: { dados: TotalPorCategoria[] }) {
+export function GraficoPizza({ dados }: { dados: FatiaGrafico[] }) {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
 
@@ -29,12 +33,12 @@ export function GraficoPizza({ dados }: { dados: TotalPorCategoria[] }) {
   const fatias = dados.map((d) => {
     const fracao = d.total / total;
     const fatia = {
-      chave: `${d.categoria_id ?? 'sem'}`,
+      chave: d.chave,
       cor: d.cor,
       comprimento: fracao * CIRCUNFERENCIA,
       deslocamento: -acumulado * CIRCUNFERENCIA,
       percentual: fracao * 100,
-      nome: d.categoria_nome,
+      nome: d.nome,
       valor: d.total,
     };
     acumulado += fracao;

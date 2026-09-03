@@ -81,6 +81,12 @@ export function formatarMes({ ano, mes }: Mes): string {
   return `${MESES[mes - 1]} de ${ano}`;
 }
 
+/** '2026-08' -> 'ago' (rotulo curto para eixos de grafico). */
+export function formatarMesAbreviado(chave: string): string {
+  const [, mes] = chave.split('-').map(Number);
+  return MESES[mes - 1].slice(0, 3);
+}
+
 export function mesesIguais(a: Mes, b: Mes): boolean {
   return a.ano === b.ano && a.mes === b.mes;
 }

@@ -98,6 +98,9 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 | **D10** | **Exclusão** | Conta com lançamentos: `ON DELETE RESTRICT`, e a UI oferece inativar. Categoria: `ON DELETE SET NULL` — o gasto vira "Sem categoria" e os totais continuam batendo. |
 | **D11** | **Categorias de sistema** | "Ajuste de saldo" nasce com `sistema = 1`: só a cor é editável. Ela sustenta D04; se o usuário pudesse excluí-la, perderia o único caminho previsto para corrigir divergência. |
 | **D12** | **Investimentos** | Tabela própria (`investimentos`), sem FK com `contas`, fora de toda query de saldo. Valor é digitado manualmente pelo usuário a cada conferência de extrato — investimento rende/cai sozinho, não é gerado por lançamento (receita/despesa) como em D03. Pedido explícito do usuário: "não vai contar pro saldo". |
+| **D13** | **Metas** | Uma meta por categoria (`UNIQUE(categoria_id)`), **recorrente** — vale todo mês até ser mudada, não é recadastrada mês a mês. Trade-off aceito: não guarda histórico de "quanto era a meta em março". `ON DELETE CASCADE` com a categoria, diferente de `lancamentos` (D10): meta não tem gasto histórico dependendo dela para preservar. |
+| **D14** | **Movimentação interna** | Um único lançamento com `tipo = 'transferencia'`, `conta_id` = origem e `conta_destino_id` = destino — **não** dois lançamentos espelhados. Um par de linhas poderia ser editado pela metade e deixar o saldo torto para sempre; uma linha só não tem esse estado inválido. Fica fora de receitas, despesas, categorias e do gráfico por dia: mover dinheiro entre contas próprias não é ganho nem gasto (garantido por `CHECK`, e verificado em 6 testes). |
+| **D15** | **Cor em conta e investimento** | Toda entidade que aparece em gráfico tem cor própria escolhida pelo usuário (migrations 6 e 7). Paleta subiu de 12 para 24 tons, organizada por matiz. Alternativa descartada: gerar cor automática por hash do nome — dá cores repetidas e feias em listas pequenas, e o usuário não consegue corrigir. |
 
 ---
 
@@ -117,15 +120,25 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 - [x] **RF16** — Importar backup JSON *(promovido de v2 — backup que não restaura é só um arquivo)*
 - [x] **RF17** — Registro rápido: FAB → formulário já preenchido com hoje, despesa e última conta usada *(novo: transforma o RNF02 em feature, não em boa intenção)*
 - [x] **RF18** — Cadastro de investimentos (banco/corretora + valor), com total geral. Fora do dashboard e do saldo total (D12) — tela própria em Ajustes › Investimentos
+- [x] **RF10** — Meta mensal de gasto por categoria (D13), com barra de progresso e aviso de estouro em Relatórios *(adiantado do v2 a pedido do usuário — ver nota abaixo)*
+- [x] **RF11** — Gráfico de evolução mensal, últimos 6 meses, receitas × despesas *(idem)*
+- [x] **RF19** — Gráfico de gasto por dia do mês, com o dia de maior gasto destacado *(novo, pedido do usuário — mesma nota abaixo)*
+- [x] **RF09** — Movimentação interna entre contas (D14) — tipo de lançamento próprio, com `CHECK` no banco impedindo destino ausente, destino igual à origem e categoria
+- [x] **RF20** — Aba própria de Investimentos com KPIs (total, nº de posições, concentração da maior) e rosca de distribuição por banco
+- [x] **RF21** — Comparativos receita × despesa: total do mês e por conta
 
 ### v2 — evolução (congelado até a Fase 7)
 
-- [ ] **RF09** — Transferência entre contas
-- [ ] **RF10** — Orçamento mensal por categoria + alerta de estouro
-- [ ] **RF11** — Gráfico de evolução mensal (últimos 6 meses)
 - [ ] **RF12** — Lançamentos recorrentes
 - [ ] **RF13** — Busca e filtros avançados
 - [ ] **RF15** — Fatura de cartão de crédito (competência ≠ pagamento)
+
+**Nota sobre RF10/RF11 terem furado a fila:** o congelamento do v2 existe para o v1
+"rodar" antes do escopo crescer (ver Riscos, seção 9). Nenhuma semana de uso
+contínuo (critério da Fase 7) tinha se completado quando essas duas entraram —
+foi pedido direto do usuário, não decisão própria. Registrado aqui para não
+mascarar que a disciplina foi quebrada; o risco documentado continua valendo
+para o que falta (RF09, RF12, RF13, RF15).
 
 ---
 
@@ -161,18 +174,41 @@ preferencias  (chave TEXT PRIMARY KEY, valor TEXT)     -- hoje só guarda o tema
 -- migration 3
 investimentos (id, nome, valor INTEGER, observacao, criado_em, atualizado_em)
               -- SEM FK com contas (D12) -- de proposito, nao entra em saldo nenhum
+
+-- migration 4
+metas         (id, categoria_id REFERENCES categorias(id) ON DELETE CASCADE UNIQUE,
+               valor INTEGER)                        -- teto mensal, recorrente (D13)
+
+-- migration 5: RECONSTRUCAO de lancamentos (SQLite nao faz ALTER de CHECK)
+lancamentos   (... tipo agora aceita 'transferencia',
+               conta_destino_id REFERENCES contas(id) ON DELETE RESTRICT,
+               CHECK que amarra transferencia <-> destino <-> categoria)
+              + idx_lanc_conta_destino
+
+-- migrations 6 e 7
+contas        + cor TEXT NOT NULL DEFAULT '#546E7A'
+investimentos + cor TEXT NOT NULL DEFAULT '#1E88E5'
 ```
+
+**Sobre a migration 5.** É a primeira que reconstrói uma tabela em vez de só
+criar/alterar. O procedimento (tabela nova → copia → `DROP` → `RENAME` → recria
+índices) é o oficial do SQLite para mudar restrição, e é seguro com
+`foreign_keys = ON` porque nenhuma tabela referencia `lancamentos`. O
+`npm run verify` cobre isso simulando o caso real: banco na versão 4 **com
+dados**, aplica a 5, e confere preservação campo a campo, `AUTOINCREMENT`,
+índices recriados, FKs vivas e `PRAGMA foreign_key_check` limpo.
 
 Índices: `(data)`, `(data, tipo)`, `(categoria_id)`, `(conta_id)`.
 O composto `(data, tipo)` existe porque **toda** consulta do dashboard filtra pelos dois.
 
-`CHECK` no banco garante o que a UI promete: `valor > 0` em lançamentos (`valor >= 0`
-em investimentos, que aceita zero), `tipo` dentro do domínio, `ativo` e `sistema`
-booleanos.
+`CHECK` no banco garante o que a UI promete: `valor > 0` em lançamentos e metas
+(`valor >= 0` em investimentos, que aceita zero), `tipo` dentro do domínio, `ativo`
+e `sistema` booleanos.
 
-`user_version` atual: **3**. Backup (RF14/16) inclui as três tabelas; um backup
-exportado antes da migration 3 não tem `investimentos` no JSON — a importação trata
-isso como lista vazia, não como erro.
+`user_version` atual: **7**. Backup (RF14/16) inclui as cinco tabelas; um backup
+exportado antes da migration 3 ou 4 não tem `investimentos`/`metas` no JSON — a
+importação trata isso como lista vazia, não como erro. Restaurar valida também que
+toda meta aponta para uma categoria que existe no próprio arquivo.
 
 ---
 
