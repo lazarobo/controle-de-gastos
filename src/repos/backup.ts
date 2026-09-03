@@ -5,7 +5,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { obterDb } from '../db';
 import { VERSAO_ALVO } from '../db/migrations';
 import { dataParaISO } from '../utils/date';
-import type { Categoria, Conta, Investimento, Lancamento } from '../types';
+import type { Categoria, Conta, Investimento, Lancamento, Meta } from '../types';
 
 export const FORMATO_BACKUP = 'controle-de-gastos-backup';
 
@@ -24,6 +24,8 @@ export interface ArquivoBackup {
   lancamentos: Lancamento[];
   /** Ausente em backups gerados antes da migration 3; tratado como []. */
   investimentos?: Investimento[];
+  /** Ausente em backups gerados antes da migration 4; tratado como []. */
+  metas?: Meta[];
 }
 
 export interface ResultadoExportacao {
@@ -34,11 +36,12 @@ export interface ResultadoExportacao {
 
 export async function montarBackup(): Promise<ArquivoBackup> {
   const db = await obterDb();
-  const [contas, categorias, lancamentos, investimentos] = await Promise.all([
+  const [contas, categorias, lancamentos, investimentos, metas] = await Promise.all([
     db.getAllAsync<Conta>('SELECT * FROM contas ORDER BY id'),
     db.getAllAsync<Categoria>('SELECT * FROM categorias ORDER BY id'),
     db.getAllAsync<Lancamento>('SELECT * FROM lancamentos ORDER BY id'),
     db.getAllAsync<Investimento>('SELECT * FROM investimentos ORDER BY id'),
+    db.getAllAsync<Meta>('SELECT * FROM metas ORDER BY id'),
   ]);
 
   return {
@@ -49,6 +52,7 @@ export async function montarBackup(): Promise<ArquivoBackup> {
     categorias,
     lancamentos,
     investimentos,
+    metas,
   };
 }
 
@@ -82,6 +86,7 @@ export interface ResultadoImportacao {
   categorias: number;
   lancamentos: number;
   investimentos: number;
+  metas: number;
 }
 
 /**
@@ -100,7 +105,14 @@ export async function importar(): Promise<ResultadoImportacao> {
   });
 
   if (escolha.canceled || !escolha.assets?.length) {
-    return { cancelado: true, contas: 0, categorias: 0, lancamentos: 0, investimentos: 0 };
+    return {
+      cancelado: true,
+      contas: 0,
+      categorias: 0,
+      lancamentos: 0,
+      investimentos: 0,
+      metas: 0,
+    };
   }
 
   const conteudo = await new File(escolha.assets[0].uri).text();
@@ -109,17 +121,23 @@ export async function importar(): Promise<ResultadoImportacao> {
   const db = await obterDb();
   await db.withTransactionAsync(async () => {
     // Ordem obrigatoria: lancamentos primeiro, senao ON DELETE RESTRICT das contas
-    // aborta a limpeza. investimentos nao tem FK com nada, a ordem dele nao importa.
+    // aborta a limpeza. metas antes de categorias pela FK (CASCADE cuidaria
+    // disso sozinho, mas apagar explicito deixa a ordem clara). investimentos
+    // nao tem FK com nada, a ordem dele nao importa.
     await db.runAsync('DELETE FROM lancamentos');
+    await db.runAsync('DELETE FROM metas');
     await db.runAsync('DELETE FROM contas');
     await db.runAsync('DELETE FROM categorias');
     await db.runAsync('DELETE FROM investimentos');
 
     for (const c of backup.contas) {
       await db.runAsync(
-        `INSERT INTO contas (id, nome, tipo, saldo_inicial, ativo, criado_em)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO contas (id, nome, tipo, saldo_inicial, ativo, cor, criado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         c.id, c.nome, c.tipo, c.saldo_inicial, c.ativo,
+        // Backup anterior a migration 6 nao tem cor: cai no mesmo cinza que a
+        // migration deu as contas que ja existiam, para o app ficar coerente.
+        c.cor ?? '#546E7A',
         c.criado_em ?? new Date().toISOString(),
       );
     }
@@ -134,9 +152,13 @@ export async function importar(): Promise<ResultadoImportacao> {
     for (const l of backup.lancamentos) {
       await db.runAsync(
         `INSERT INTO lancamentos
-           (id, descricao, valor, tipo, data, conta_id, categoria_id, observacao, criado_em)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, descricao, valor, tipo, data, conta_id, conta_destino_id,
+            categoria_id, observacao, criado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         l.id, l.descricao, l.valor, l.tipo, l.data, l.conta_id,
+        // Ausente em backup anterior a migration 5 -- e obrigatoriamente null
+        // fora de transferencia, que o CHECK do banco confere.
+        l.conta_destino_id ?? null,
         l.categoria_id ?? null, l.observacao ?? null,
         l.criado_em ?? new Date().toISOString(),
       );
@@ -151,6 +173,14 @@ export async function importar(): Promise<ResultadoImportacao> {
         i.atualizado_em ?? new Date().toISOString(),
       );
     }
+
+    // Depois de categorias (FK) e independente de investimentos/lancamentos.
+    for (const m of backup.metas ?? []) {
+      await db.runAsync(
+        'INSERT INTO metas (id, categoria_id, valor) VALUES (?, ?, ?)',
+        m.id, m.categoria_id, m.valor,
+      );
+    }
   });
 
   return {
@@ -159,6 +189,7 @@ export async function importar(): Promise<ResultadoImportacao> {
     categorias: backup.categorias.length,
     lancamentos: backup.lancamentos.length,
     investimentos: backup.investimentos?.length ?? 0,
+    metas: backup.metas?.length ?? 0,
   };
 }
 
@@ -195,18 +226,38 @@ function validar(conteudo: string): ArquivoBackup {
     return erro('O backup está incompleto: faltam contas, categorias ou lançamentos.');
   }
 
-  // Ausente = backup de antes da migration 3 (investimentos nao existia). Nao e
-  // erro, so nao havia o que exportar; b.investimentos fica undefined e o resto
-  // do fluxo trata como lista vazia.
+  // Ausente = backup de antes da migration 3/4 (investimentos/metas nao existiam
+  // ainda). Nao e erro, so nao havia o que exportar; os campos ficam undefined e
+  // o resto do fluxo trata como lista vazia.
   if (b.investimentos !== undefined && !Array.isArray(b.investimentos)) {
     return erro('O backup está corrompido: o campo de investimentos não é uma lista.');
   }
+  if (b.metas !== undefined && !Array.isArray(b.metas)) {
+    return erro('O backup está corrompido: o campo de metas não é uma lista.');
+  }
 
   const idsContas = new Set(b.contas.map((c) => c.id));
-  const orfao = b.lancamentos.find((l) => !idsContas.has(l.conta_id));
-  if (orfao) {
+  const orfaoLancamento = b.lancamentos.find((l) => !idsContas.has(l.conta_id));
+  if (orfaoLancamento) {
     return erro(
-      `O backup está inconsistente: o lançamento "${orfao.descricao}" aponta para uma conta que não existe no arquivo.`,
+      `O backup está inconsistente: o lançamento "${orfaoLancamento.descricao}" aponta para uma conta que não existe no arquivo.`,
+    );
+  }
+
+  const orfaoDestino = b.lancamentos.find(
+    (l) => l.conta_destino_id != null && !idsContas.has(l.conta_destino_id),
+  );
+  if (orfaoDestino) {
+    return erro(
+      `O backup está inconsistente: a movimentação "${orfaoDestino.descricao}" aponta para uma conta de destino que não existe no arquivo.`,
+    );
+  }
+
+  const idsCategorias = new Set(b.categorias.map((c) => c.id));
+  const orfaoMeta = b.metas?.find((m) => !idsCategorias.has(m.categoria_id));
+  if (orfaoMeta) {
+    return erro(
+      'O backup está inconsistente: uma meta aponta para uma categoria que não existe no arquivo.',
     );
   }
 

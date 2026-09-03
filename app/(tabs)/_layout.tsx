@@ -64,6 +64,13 @@ export default function LayoutAbas() {
         }}
       />
       <Tabs.Screen
+        name="investimentos"
+        options={{
+          title: 'Investir',
+          tabBarIcon: ({ color }) => <Icone glifo="▲" cor={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="ajustes"
         options={{
           title: 'Ajustes',

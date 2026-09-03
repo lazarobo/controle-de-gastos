@@ -4,10 +4,11 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Botao, Campo, Carregando, Chips, Rotulo } from '../../src/components/ui';
+import { SeletorCor } from '../../src/components/SeletorCor';
 import * as contasRepo from '../../src/repos/contas';
 import { formatarValor, parseMoeda } from '../../src/utils/money';
 import { useTema } from '../../src/contexto/TemaContexto';
-import { espaco, type Paleta } from '../../src/utils/tema';
+import { espaco, PALETA, type Paleta } from '../../src/utils/tema';
 import { TIPOS_CONTA, type TipoConta } from '../../src/types';
 
 export default function FormularioConta() {
@@ -25,6 +26,7 @@ export default function FormularioConta() {
   const [tipo, setTipo] = useState<TipoConta>('corrente');
   const [saldoInicial, setSaldoInicial] = useState('0,00');
   const [ativo, setAtivo] = useState(true);
+  const [cor, setCor] = useState(PALETA[0]);
   const [erroNome, setErroNome] = useState<string | null>(null);
   const [erroSaldo, setErroSaldo] = useState<string | null>(null);
 
@@ -39,6 +41,7 @@ export default function FormularioConta() {
         setTipo(c.tipo);
         setSaldoInicial(formatarValor(c.saldo_inicial));
         setAtivo(c.ativo === 1);
+        setCor(c.cor);
       }
       setCarregando(false);
     });
@@ -69,6 +72,7 @@ export default function FormularioConta() {
       tipo,
       saldo_inicial: negativo ? -centavos : centavos,
       ativo,
+      cor,
     };
 
     setSalvando(true);
@@ -105,6 +109,7 @@ export default function FormularioConta() {
                 tipo,
                 saldo_inicial: parseMoeda(saldoInicial) ?? 0,
                 ativo: false,
+                cor,
               });
               router.back();
             },
@@ -178,6 +183,11 @@ export default function FormularioConta() {
           categoria "Ajuste de saldo" — nunca mexendo neste campo, ou os meses
           passados deixam de fechar.
         </Text>
+
+        <View style={e.grupo}>
+          <Rotulo>Cor nos gráficos</Rotulo>
+          <SeletorCor cor={cor} onChange={setCor} />
+        </View>
 
         <View style={e.linhaSwitch}>
           <View style={{ flex: 1 }}>

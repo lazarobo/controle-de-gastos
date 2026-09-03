@@ -33,10 +33,13 @@ export default function ListaLancamentos() {
     }
     return Array.from(porDia, ([data, itens]) => ({
       title: data,
-      total: itens.reduce(
-        (soma, i) => soma + (i.tipo === 'receita' ? i.valor : -i.valor),
-        0,
-      ),
+      // Transferencia fica fora: ela move dinheiro entre contas proprias, entao
+      // somar como saida (ou entrada) inventaria um gasto que nao existiu no dia.
+      total: itens.reduce((soma, i) => {
+        if (i.tipo === 'receita') return soma + i.valor;
+        if (i.tipo === 'despesa') return soma - i.valor;
+        return soma;
+      }, 0),
       data: itens,
     }));
   }, [dados]);
@@ -85,7 +88,12 @@ export default function ListaLancamentos() {
             <View
               style={[
                 e.marca,
-                { backgroundColor: item.categoria_cor ?? cores.neutra },
+                {
+                  backgroundColor:
+                    item.tipo === 'transferencia'
+                      ? cores.transferencia
+                      : item.categoria_cor ?? cores.neutra,
+                },
               ]}
             />
             <View style={e.meio}>
@@ -93,16 +101,27 @@ export default function ListaLancamentos() {
                 {item.descricao}
               </Text>
               <Text style={e.subtitulo} numberOfLines={1}>
-                {item.categoria_nome ?? 'Sem categoria'} · {item.conta_nome}
+                {item.tipo === 'transferencia'
+                  ? `${item.conta_nome} → ${item.conta_destino_nome ?? '?'}`
+                  : `${item.categoria_nome ?? 'Sem categoria'} · ${item.conta_nome}`}
               </Text>
             </View>
             <Text
               style={[
                 e.valor,
-                { color: item.tipo === 'receita' ? cores.receita : cores.despesa },
+                {
+                  color:
+                    item.tipo === 'receita'
+                      ? cores.receita
+                      : item.tipo === 'despesa'
+                        ? cores.despesa
+                        : cores.transferencia,
+                },
               ]}
             >
-              {item.tipo === 'receita' ? '+' : '−'} {formatarMoeda(item.valor)}
+              {/* Transferencia nao ganha sinal: nao entra nem sai do seu patrimonio. */}
+              {item.tipo === 'receita' ? '+ ' : item.tipo === 'despesa' ? '− ' : ''}
+              {formatarMoeda(item.valor)}
             </Text>
           </Pressable>
         )}

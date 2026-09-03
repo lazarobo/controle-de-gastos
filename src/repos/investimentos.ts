@@ -6,6 +6,7 @@ export interface DadosInvestimento {
   /** Centavos. */
   valor: number;
   observacao: string | null;
+  cor: string;
 }
 
 export async function listar(): Promise<Investimento[]> {
@@ -23,10 +24,11 @@ export async function obter(id: number): Promise<Investimento | null> {
 export async function criar(dados: DadosInvestimento): Promise<number> {
   const db = await obterDb();
   const r = await db.runAsync(
-    `INSERT INTO investimentos (nome, valor, observacao) VALUES (?, ?, ?)`,
+    `INSERT INTO investimentos (nome, valor, observacao, cor) VALUES (?, ?, ?, ?)`,
     dados.nome.trim(),
     dados.valor,
     dados.observacao?.trim() || null,
+    dados.cor,
   );
   return r.lastInsertRowId;
 }
@@ -40,11 +42,12 @@ export async function atualizar(id: number, dados: DadosInvestimento): Promise<v
   const db = await obterDb();
   await db.runAsync(
     `UPDATE investimentos
-     SET nome = ?, valor = ?, observacao = ?, atualizado_em = datetime('now')
+     SET nome = ?, valor = ?, observacao = ?, cor = ?, atualizado_em = datetime('now')
      WHERE id = ?`,
     dados.nome.trim(),
     dados.valor,
     dados.observacao?.trim() || null,
+    dados.cor,
     id,
   );
 }

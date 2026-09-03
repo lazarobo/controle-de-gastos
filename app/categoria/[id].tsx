@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Botao, Campo, Carregando, Chips, Rotulo } from '../../src/components/ui';
+import { SeletorCor } from '../../src/components/SeletorCor';
 import * as categoriasRepo from '../../src/repos/categorias';
 import { useTema } from '../../src/contexto/TemaContexto';
 import { espaco, PALETA, raio, type Paleta } from '../../src/utils/tema';
@@ -147,15 +148,7 @@ export default function FormularioCategoria() {
 
         <View style={e.grupo}>
           <Rotulo>Cor no gráfico</Rotulo>
-          <View style={e.paleta}>
-            {PALETA.map((c) => (
-              <Pressable
-                key={c}
-                onPress={() => setCor(c)}
-                style={[e.amostra, { backgroundColor: c }, cor === c && e.amostraAtiva]}
-              />
-            ))}
-          </View>
+          <SeletorCor cor={cor} onChange={setCor} />
         </View>
 
         <View style={e.acoes}>
@@ -182,9 +175,6 @@ function criarEstilos(cores: Paleta) {
       marginBottom: espaco.lg,
     },
     avisoSistemaTexto: { fontSize: 13, color: cores.texto, lineHeight: 18 },
-    paleta: { flexDirection: 'row', flexWrap: 'wrap', gap: espaco.sm },
-    amostra: { width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: 'transparent' },
-    amostraAtiva: { borderColor: cores.texto },
     acoes: { gap: espaco.sm, marginTop: espaco.lg },
   });
 }

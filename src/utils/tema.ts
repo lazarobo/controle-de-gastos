@@ -16,6 +16,8 @@ export const paletaClara = {
   primariaFraca: '#E8F1FD',
   receita: '#1B8A3F',
   despesa: '#C62828',
+  /** Movimentacao interna: nem ganho nem gasto, entao nem verde nem vermelho. */
+  transferencia: '#5E6C7A',
   perigo: '#C62828',
   neutra: '#9E9E9E',
 };
@@ -31,6 +33,7 @@ export const paletaEscura: Paleta = {
   primariaFraca: '#1D3352',
   receita: '#4CAF6E',
   despesa: '#E5695F',
+  transferencia: '#8A99A8',
   perigo: '#E5695F',
   neutra: '#7A8794',
 };
@@ -50,12 +53,21 @@ export const raio = {
 };
 
 /**
- * Paleta oferecida ao criar categoria. Nao muda com o tema: a cor da
- * categoria e escolhida pelo usuario e precisa continuar reconhecivel tanto
- * no claro quanto no escuro.
+ * Paleta oferecida ao criar categoria e conta. Nao muda com o tema: a cor e
+ * escolhida pelo usuario e precisa continuar reconhecivel no claro E no escuro
+ * -- por isso nada de tom pastel nem de quase-preto/quase-branco aqui.
+ *
+ * Organizada em quatro linhas de seis, percorrendo o circulo cromatico
+ * (vermelhos -> laranjas/amarelos -> verdes -> azuis/roxos), para o seletor
+ * virar uma grade legivel em vez de uma sopa de cores.
  */
 export const PALETA = [
-  '#E53935', '#FB8C00', '#FDD835', '#43A047', '#00ACC1',
-  '#1E88E5', '#3949AB', '#8E24AA', '#D81B60', '#6D4C41',
-  '#546E7A', '#757575',
+  // vermelhos e rosas
+  '#E53935', '#D81B60', '#C2185B', '#AD1457', '#F4511E', '#BF360C',
+  // laranjas e amarelos
+  '#FB8C00', '#F57C00', '#FFA000', '#FDD835', '#F9A825', '#8D6E63',
+  // verdes e ciano
+  '#43A047', '#2E7D32', '#7CB342', '#00897B', '#00ACC1', '#0097A7',
+  // azuis, roxos e neutros
+  '#1E88E5', '#1565C0', '#3949AB', '#5E35B1', '#8E24AA', '#546E7A',
 ];

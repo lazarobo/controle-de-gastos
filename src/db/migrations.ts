@@ -101,6 +101,102 @@ export const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    versao: 4,
+    nome: 'metas',
+    sql: `
+      -- RF10: orcamento mensal por categoria. UNIQUE(categoria_id) porque a
+      -- meta e RECORRENTE -- um teto por categoria que vale todo mes, nao um
+      -- valor diferente cadastrado mes a mes. Editar a meta muda o teto dali
+      -- pra frente; nao ha historico de "quanto era a meta em marco".
+      -- ON DELETE CASCADE: sem a categoria a meta nao tem mais sentido, e
+      -- metas nao tem nenhum dado historico dependente delas (diferente de
+      -- lancamentos, que usam SET NULL para preservar o gasto ja registrado).
+      CREATE TABLE metas (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        categoria_id INTEGER NOT NULL UNIQUE REFERENCES categorias(id) ON DELETE CASCADE,
+        -- Centavos. Teto de gasto mensal para a categoria.
+        valor        INTEGER NOT NULL CHECK (valor > 0)
+      );
+    `,
+  },
+  {
+    versao: 5,
+    nome: 'movimentacao interna entre contas',
+    sql: `
+      -- RF09: transferencia entre contas. Precisa de DUAS mudancas que o SQLite
+      -- nao faz por ALTER TABLE -- ampliar o CHECK de 'tipo' e adicionar uma
+      -- coluna com REFERENCES -- entao a tabela e reconstruida. Este e o
+      -- procedimento oficial do SQLite para alterar restricoes.
+      --
+      -- Seguro com foreign_keys = ON porque NENHUMA tabela referencia
+      -- lancamentos; as FKs aqui sao todas de saida (para contas/categorias) e
+      -- sao revalidadas no INSERT abaixo, com os mesmos dados que ja passavam.
+      CREATE TABLE lancamentos_novo (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        descricao        TEXT    NOT NULL,
+        valor            INTEGER NOT NULL CHECK (valor > 0),
+        tipo             TEXT    NOT NULL CHECK (tipo IN ('receita','despesa','transferencia')),
+        data             TEXT    NOT NULL,
+        -- Na transferencia, conta_id e a ORIGEM (de onde o dinheiro sai).
+        conta_id         INTEGER NOT NULL REFERENCES contas(id) ON DELETE RESTRICT,
+        -- Só existe em transferencia: o destino (para onde o dinheiro vai).
+        conta_destino_id INTEGER REFERENCES contas(id) ON DELETE RESTRICT,
+        categoria_id     INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
+        observacao       TEXT,
+        criado_em        TEXT    NOT NULL DEFAULT (datetime('now')),
+
+        -- Impede no banco os tres jeitos de uma transferencia nascer incoerente:
+        -- sem destino, com destino igual a origem, ou com categoria (transferencia
+        -- nao e gasto nem receita, entao nao entra em nenhuma categoria). E impede
+        -- que receita/despesa ganhem destino por engano.
+        CHECK (
+          (tipo =  'transferencia' AND conta_destino_id IS NOT NULL
+                                   AND conta_destino_id <> conta_id
+                                   AND categoria_id IS NULL)
+          OR
+          (tipo <> 'transferencia' AND conta_destino_id IS NULL)
+        )
+      );
+
+      INSERT INTO lancamentos_novo
+        (id, descricao, valor, tipo, data, conta_id, conta_destino_id, categoria_id, observacao, criado_em)
+      SELECT
+         id, descricao, valor, tipo, data, conta_id, NULL,             categoria_id, observacao, criado_em
+      FROM lancamentos;
+
+      DROP TABLE lancamentos;
+      ALTER TABLE lancamentos_novo RENAME TO lancamentos;
+
+      -- Os indices morreram junto com a tabela antiga; recriar e obrigatorio.
+      CREATE INDEX idx_lanc_data          ON lancamentos(data);
+      CREATE INDEX idx_lanc_data_tipo     ON lancamentos(data, tipo);
+      CREATE INDEX idx_lanc_categoria     ON lancamentos(categoria_id);
+      CREATE INDEX idx_lanc_conta         ON lancamentos(conta_id);
+      CREATE INDEX idx_lanc_conta_destino ON lancamentos(conta_destino_id);
+    `,
+  },
+  {
+    versao: 6,
+    nome: 'cor nas contas',
+    sql: `
+      -- Contas ganham cor para poderem aparecer em grafico (comparativo por
+      -- conta) com a mesma linguagem visual das categorias. ALTER TABLE ADD
+      -- COLUMN basta aqui -- ao contrario da migration 5, nao ha CHECK novo
+      -- nem REFERENCES, e o DEFAULT e uma constante, entao o SQLite aceita.
+      -- Contas que ja existiam adotam o cinza-azulado neutro.
+      ALTER TABLE contas ADD COLUMN cor TEXT NOT NULL DEFAULT '#546E7A';
+    `,
+  },
+  {
+    versao: 7,
+    nome: 'cor nos investimentos',
+    sql: `
+      -- Mesmo motivo da migration 6: a tela de Investimentos passa a ter rosca
+      -- de distribuicao por banco, e fatia sem cor propria nao se distingue.
+      ALTER TABLE investimentos ADD COLUMN cor TEXT NOT NULL DEFAULT '#1E88E5';
+    `,
+  },
 ];
 
 export const VERSAO_ALVO = MIGRATIONS.reduce((max, m) => Math.max(max, m.versao), 0);

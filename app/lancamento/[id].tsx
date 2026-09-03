@@ -20,7 +20,7 @@ import { formatarValor } from '../../src/utils/money';
 import { dataParaISO, formatarData, hojeISO } from '../../src/utils/date';
 import { useTema } from '../../src/contexto/TemaContexto';
 import { espaco, type Paleta } from '../../src/utils/tema';
-import type { Categoria, Conta, TipoMovimento } from '../../src/types';
+import type { Categoria, Conta, TipoLancamento } from '../../src/types';
 
 export default function FormularioLancamento() {
   const { cores } = useTema();
@@ -36,11 +36,12 @@ export default function FormularioLancamento() {
   const [contas, setContas] = useState<Conta[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
 
-  const [tipo, setTipo] = useState<TipoMovimento>('despesa');
+  const [tipo, setTipo] = useState<TipoLancamento>('despesa');
   const [valor, setValor] = useState(0);
   const [descricao, setDescricao] = useState('');
   const [dataTexto, setDataTexto] = useState(formatarData(hojeISO()));
   const [contaId, setContaId] = useState<number | null>(null);
+  const [contaDestinoId, setContaDestinoId] = useState<number | null>(null);
   const [categoriaId, setCategoriaId] = useState<number | null>(null);
   const [observacao, setObservacao] = useState('');
   const [erroValor, setErroValor] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function FormularioLancamento() {
         setDescricao(l.descricao);
         setDataTexto(formatarData(l.data));
         setContaId(l.conta_id);
+        setContaDestinoId(l.conta_destino_id);
         setCategoriaId(l.categoria_id);
         setObservacao(l.observacao ?? '');
       }
@@ -96,9 +98,13 @@ export default function FormularioLancamento() {
     };
   }, [id]);
 
+  const transferencia = tipo === 'transferencia';
+
+  // Transferencia nao tem categoria (CHECK no banco), entao a lista fica vazia
+  // e a secao de categoria some da tela.
   const categoriasDoTipo = useMemo(
-    () => categorias.filter((c) => c.tipo === tipo),
-    [categorias, tipo],
+    () => (transferencia ? [] : categorias.filter((c) => c.tipo === tipo)),
+    [categorias, tipo, transferencia],
   );
 
   // Trocar receita <-> despesa invalida a categoria escolhida, que pertence ao outro tipo.
@@ -107,6 +113,20 @@ export default function FormularioLancamento() {
       setCategoriaId(null);
     }
   }, [categoriasDoTipo, categoriaId]);
+
+  // Sair de transferencia deixaria um destino orfao, que o CHECK do banco recusa.
+  useEffect(() => {
+    if (!transferencia && contaDestinoId != null) setContaDestinoId(null);
+  }, [transferencia, contaDestinoId]);
+
+  // Trocar a origem para a conta que ja era o destino deixaria os dois iguais.
+  // O CHECK do banco recusaria no salvar; limpar aqui evita o usuario descobrir
+  // isso so depois de preencher o resto.
+  useEffect(() => {
+    if (transferencia && contaDestinoId != null && contaDestinoId === contaId) {
+      setContaDestinoId(null);
+    }
+  }, [transferencia, contaId, contaDestinoId]);
 
   async function salvar() {
     if (valor <= 0) {
@@ -123,25 +143,47 @@ export default function FormularioLancamento() {
     setErroData(null);
 
     if (contaId == null) {
-      Alert.alert('Escolha a conta', 'Todo lançamento precisa estar ligado a uma conta.');
+      Alert.alert(
+        transferencia ? 'Escolha a conta de origem' : 'Escolha a conta',
+        'Todo lançamento precisa estar ligado a uma conta.',
+      );
       return;
+    }
+
+    if (transferencia) {
+      if (contaDestinoId == null) {
+        Alert.alert('Escolha a conta de destino', 'A movimentação precisa de um destino.');
+        return;
+      }
+      if (contaDestinoId === contaId) {
+        Alert.alert('Contas iguais', 'Origem e destino precisam ser contas diferentes.');
+        return;
+      }
     }
 
     // Descricao em branco cai para o nome da categoria: sem isso o registro rapido
     // exigiria digitar duas coisas, e o RNF02 nao fecharia.
     const nomeCategoria = categoriasDoTipo.find((c) => c.id === categoriaId)?.nome;
     const descricaoFinal =
-      descricao.trim() || nomeCategoria || (tipo === 'receita' ? 'Receita' : 'Despesa');
+      descricao.trim() ||
+      (transferencia
+        ? `${contas.find((c) => c.id === contaId)?.nome ?? '?'} → ${
+            contas.find((c) => c.id === contaDestinoId)?.nome ?? '?'
+          }`
+        : nomeCategoria || (tipo === 'receita' ? 'Receita' : 'Despesa'));
 
     setSalvando(true);
     try {
+      // categoria e destino sao mutuamente exclusivos -- o CHECK do banco recusa
+      // qualquer combinacao fora disso, entao zeramos o lado que nao se aplica.
       const dados = {
         descricao: descricaoFinal,
         valor,
         tipo,
         data: dataISO,
         conta_id: contaId,
-        categoria_id: categoriaId,
+        conta_destino_id: transferencia ? contaDestinoId : null,
+        categoria_id: transferencia ? null : categoriaId,
         observacao: observacao.trim() || null,
       };
 
@@ -213,11 +255,19 @@ export default function FormularioLancamento() {
               itens={[
                 { valor: 'despesa', rotulo: 'Despesa', cor: cores.despesa },
                 { valor: 'receita', rotulo: 'Receita', cor: cores.receita },
+                { valor: 'transferencia', rotulo: 'Movimentação', cor: cores.transferencia },
               ]}
               valor={tipo}
-              onChange={(v) => setTipo(v as TipoMovimento)}
+              onChange={(v) => setTipo(v as TipoLancamento)}
             />
           </View>
+
+          {transferencia ? (
+            <Text style={e.avisoTransferencia}>
+              Movimentação interna: o dinheiro sai de uma conta sua e entra em outra.
+              Não conta como receita nem despesa, e não altera seu saldo total.
+            </Text>
+          ) : null}
 
           <CampoValor
             rotulo="Valor"
@@ -231,7 +281,11 @@ export default function FormularioLancamento() {
             rotulo="Descrição (opcional)"
             value={descricao}
             onChangeText={setDescricao}
-            placeholder="Usa o nome da categoria se ficar em branco"
+            placeholder={
+              transferencia
+                ? 'Usa "origem → destino" se ficar em branco'
+                : 'Usa o nome da categoria se ficar em branco'
+            }
           />
 
           <View style={e.grupo}>
@@ -259,7 +313,7 @@ export default function FormularioLancamento() {
           />
 
           <View style={e.grupo}>
-            <Rotulo>Conta</Rotulo>
+            <Rotulo>{transferencia ? 'De (origem)' : 'Conta'}</Rotulo>
             <Chips
               itens={contas.map((c) => ({ valor: c.id, rotulo: c.nome }))}
               valor={contaId}
@@ -267,6 +321,28 @@ export default function FormularioLancamento() {
             />
           </View>
 
+          {transferencia ? (
+            <View style={e.grupo}>
+              <Rotulo>Para (destino)</Rotulo>
+              {contas.length < 2 ? (
+                <Text style={e.semCategoria}>
+                  Movimentação precisa de pelo menos duas contas. Cadastre outra em
+                  Ajustes › Contas.
+                </Text>
+              ) : (
+                <Chips
+                  // A origem sai da lista: o banco recusa origem igual ao destino.
+                  itens={contas
+                    .filter((c) => c.id !== contaId)
+                    .map((c) => ({ valor: c.id, rotulo: c.nome }))}
+                  valor={contaDestinoId}
+                  onChange={setContaDestinoId}
+                />
+              )}
+            </View>
+          ) : null}
+
+          {transferencia ? null : (
           <View style={e.grupo}>
             <Rotulo>Categoria</Rotulo>
             {categoriasDoTipo.length === 0 ? (
@@ -285,6 +361,7 @@ export default function FormularioLancamento() {
               />
             )}
           </View>
+          )}
 
           <Campo
             rotulo="Observação (opcional)"
@@ -355,6 +432,13 @@ function criarEstilos(cores: Paleta) {
     grupo: { marginBottom: espaco.lg },
     inputMultilinha: { minHeight: 80, textAlignVertical: 'top' },
     semCategoria: { fontSize: 13, color: cores.textoFraco },
+    avisoTransferencia: {
+      fontSize: 12,
+      color: cores.textoFraco,
+      lineHeight: 17,
+      marginTop: -espaco.sm,
+      marginBottom: espaco.lg,
+    },
     acoes: { gap: espaco.sm, marginTop: espaco.sm },
   });
 }

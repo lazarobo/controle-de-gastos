@@ -57,8 +57,8 @@ export default function Ajustes() {
       if (r.cancelado) return;
       Alert.alert(
         'Backup restaurado',
-        `${r.contas} conta(s), ${r.categorias} categoria(s), ${r.lancamentos} lançamento(s) e ` +
-          `${r.investimentos} investimento(s) importados.`,
+        `${r.contas} conta(s), ${r.categorias} categoria(s), ${r.lancamentos} lançamento(s), ` +
+          `${r.investimentos} investimento(s) e ${r.metas} meta(s) importados.`,
       );
     } catch (erro) {
       Alert.alert('Erro ao restaurar', mensagem(erro));
@@ -78,9 +78,9 @@ export default function Ajustes() {
           onPress={() => router.push('/categorias')}
         />
         <Item
-          rotulo="Investimentos"
-          detalhe="Quanto está investido em cada banco"
-          onPress={() => router.push('/investimentos')}
+          rotulo="Metas"
+          detalhe="Teto mensal de gasto por categoria"
+          onPress={() => router.push('/metas')}
         />
       </Cartao>
 
