@@ -31,7 +31,18 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+# Repositorio publico: ".env*.local" sozinho NAO cobre um ".env" puro, que e
+# justamente o nome mais comum de arquivo com segredo.
+.env
+.env.*
+!.env.example
+
+# Config pessoal de ferramenta (caminhos locais, permissoes da maquina)
+.claude/settings.local.json
+
+# Credenciais de assinatura Android -- alem do *.jks ja coberto acima
+*.keystore
+credentials.json
 
 # typescript
 *.tsbuildinfo
