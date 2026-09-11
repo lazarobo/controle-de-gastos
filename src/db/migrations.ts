@@ -13,6 +13,14 @@ export interface Migration {
   versao: number;
   nome: string;
   sql: string;
+  /**
+   * Para migrations que RECONSTROEM uma tabela referenciada por outra (ex.:
+   * contas, que lancamentos referencia). Com foreign_keys ligado, o DROP TABLE
+   * da tabela antiga dispara o ON DELETE RESTRICT dos filhos e aborta. O
+   * procedimento oficial do SQLite e desligar as FKs FORA da transacao,
+   * reconstruir, conferir com PRAGMA foreign_key_check e religar.
+   */
+  desligaChavesEstrangeiras?: boolean;
 }
 
 export const MIGRATIONS: Migration[] = [
@@ -197,6 +205,39 @@ export const MIGRATIONS: Migration[] = [
       ALTER TABLE investimentos ADD COLUMN cor TEXT NOT NULL DEFAULT '#1E88E5';
     `,
   },
+  {
+    versao: 8,
+    nome: 'eventos como tipo de conta',
+    desligaChavesEstrangeiras: true,
+    sql: `
+      -- Evento (viagem, show) e uma conta: o usuario transfere dinheiro para
+      -- ela e lanca os gastos a partir dela. Precisa ampliar o CHECK de tipo,
+      -- que so muda reconstruindo a tabela. Diferente da migration 5, contas e
+      -- REFERENCIADA por lancamentos -- por isso desligaChavesEstrangeiras.
+      CREATE TABLE contas_novo (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome          TEXT    NOT NULL,
+        tipo          TEXT    NOT NULL
+                      CHECK (tipo IN ('corrente','poupanca','cartao','dinheiro','evento')),
+        saldo_inicial INTEGER NOT NULL DEFAULT 0,
+        ativo         INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0,1)),
+        criado_em     TEXT    NOT NULL DEFAULT (datetime('now')),
+        cor           TEXT    NOT NULL DEFAULT '#546E7A',
+        -- 'YYYY-MM-DD', opcionais, so fazem sentido em evento.
+        data_inicio   TEXT,
+        data_fim      TEXT,
+        CHECK (tipo = 'evento' OR (data_inicio IS NULL AND data_fim IS NULL)),
+        CHECK (data_inicio IS NULL OR data_fim IS NULL OR data_fim >= data_inicio)
+      );
+
+      INSERT INTO contas_novo (id, nome, tipo, saldo_inicial, ativo, criado_em, cor)
+      SELECT                   id, nome, tipo, saldo_inicial, ativo, criado_em, cor
+      FROM contas;
+
+      DROP TABLE contas;
+      ALTER TABLE contas_novo RENAME TO contas;
+    `,
+  },
 ];
 
 export const VERSAO_ALVO = MIGRATIONS.reduce((max, m) => Math.max(max, m.versao), 0);
@@ -214,10 +255,37 @@ export async function migrar(db: SQLiteDatabase): Promise<void> {
 
   for (const migration of MIGRATIONS) {
     if (migration.versao <= atual) continue;
-    // PRAGMA user_version nao aceita parametro vinculado, por isso a interpolacao.
-    // O valor vem de constante do codigo, nunca de entrada do usuario.
-    await db.execAsync(
-      `BEGIN;${migration.sql};PRAGMA user_version = ${migration.versao};COMMIT;`,
-    );
+
+    if (!migration.desligaChavesEstrangeiras) {
+      // PRAGMA user_version nao aceita parametro vinculado, por isso a interpolacao.
+      // O valor vem de constante do codigo, nunca de entrada do usuario.
+      await db.execAsync(
+        `BEGIN;${migration.sql};PRAGMA user_version = ${migration.versao};COMMIT;`,
+      );
+      continue;
+    }
+
+    // PRAGMA foreign_keys e ignorado dentro de transacao: tem de vir antes do BEGIN.
+    await db.execAsync('PRAGMA foreign_keys = OFF');
+    try {
+      await db.execAsync('BEGIN');
+      await db.execAsync(migration.sql);
+      // Com as FKs desligadas nada impediu uma referencia de ficar orfa; esta
+      // conferencia e o que torna o procedimento seguro. Qualquer linha aqui
+      // desfaz a migration inteira.
+      const orfas = await db.getAllAsync('PRAGMA foreign_key_check');
+      if (orfas.length > 0) {
+        throw new Error(
+          `Migration ${migration.versao} deixaria ${orfas.length} referencia(s) quebrada(s); desfeita.`,
+        );
+      }
+      await db.execAsync(`PRAGMA user_version = ${migration.versao}`);
+      await db.execAsync('COMMIT');
+    } catch (erro) {
+      await db.execAsync('ROLLBACK').catch(() => {});
+      throw erro;
+    } finally {
+      await db.execAsync('PRAGMA foreign_keys = ON');
+    }
   }
 }

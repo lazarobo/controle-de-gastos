@@ -17,7 +17,13 @@ import * as categoriasRepo from '../../src/repos/categorias';
 import * as contasRepo from '../../src/repos/contas';
 import * as lancamentosRepo from '../../src/repos/lancamentos';
 import { formatarValor } from '../../src/utils/money';
-import { dataParaISO, formatarData, hojeISO } from '../../src/utils/date';
+import {
+  formatarData,
+  hojeISO,
+  mascararData,
+  ontemISO,
+  textoParaISO,
+} from '../../src/utils/date';
 import { useTema } from '../../src/contexto/TemaContexto';
 import { espaco, type Paleta } from '../../src/utils/tema';
 import type { Categoria, Conta, TipoLancamento } from '../../src/types';
@@ -26,7 +32,14 @@ export default function FormularioLancamento() {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // tipo/conta/destino chegam da tela do evento ("Registrar gasto",
+  // "Separar mais"), para o formulario ja abrir preenchido.
+  const {
+    id,
+    tipo: tipoParam,
+    conta: contaParam,
+    destino: destinoParam,
+  } = useLocalSearchParams<{ id: string; tipo?: string; conta?: string; destino?: string }>();
   const novo = id === 'novo';
   const idNumero = novo ? null : Number(id);
   const router = useRouter();
@@ -66,6 +79,12 @@ export default function FormularioLancamento() {
         const ultima = await lancamentosRepo.ultimaContaUsada();
         if (!ativo) return;
         setContaId(ultima ?? listaContas[0]?.id ?? null);
+
+        if (tipoParam === 'despesa' || tipoParam === 'receita' || tipoParam === 'transferencia') {
+          setTipo(tipoParam);
+        }
+        if (contaParam) setContaId(Number(contaParam));
+        if (destinoParam) setContaDestinoId(Number(destinoParam));
       } else if (idNumero != null) {
         const l = await lancamentosRepo.obter(idNumero);
         if (!ativo) return;
@@ -384,45 +403,12 @@ export default function FormularioLancamento() {
   );
 }
 
-function ontemISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return dataParaISO(d);
-}
-
 function atalhoAtivo(texto: string): 'hoje' | 'ontem' | null {
   const iso = textoParaISO(texto);
   if (!iso) return null;
   if (iso === hojeISO()) return 'hoje';
   if (iso === ontemISO()) return 'ontem';
   return null;
-}
-
-/** Insere as barras enquanto o usuario digita, aceitando apagar. */
-function mascararData(texto: string): string {
-  const d = texto.replace(/\D/g, '').slice(0, 8);
-  if (d.length <= 2) return d;
-  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
-  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
-}
-
-/**
- * 'DD/MM/AAAA' -> 'YYYY-MM-DD'. Retorna null para datas inexistentes como 31/02,
- * que o construtor Date aceitaria silenciosamente virando 03/03.
- */
-function textoParaISO(texto: string): string | null {
-  const m = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!m) return null;
-
-  const dia = Number(m[1]);
-  const mes = Number(m[2]);
-  const ano = Number(m[3]);
-
-  const d = new Date(ano, mes - 1, dia);
-  if (d.getFullYear() !== ano || d.getMonth() !== mes - 1 || d.getDate() !== dia) {
-    return null;
-  }
-  return dataParaISO(d);
 }
 
 function criarEstilos(cores: Paleta) {

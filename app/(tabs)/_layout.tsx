@@ -39,6 +39,9 @@ export default function LayoutAbas() {
         headerTintColor: cores.texto,
         tabBarStyle: { backgroundColor: cores.superficie, borderTopColor: cores.borda },
         sceneStyle: { backgroundColor: cores.fundo },
+        // Troca de aba desliza em vez de piscar: o jeito mais barato de o app
+        // inteiro parecer menos estatico, sem tocar em nenhuma tela.
+        animation: 'shift',
         headerRight: () => <BotaoTema />,
       }}
     >

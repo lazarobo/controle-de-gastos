@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { Aparecer, NumeroAnimado, Tocavel } from '../../src/components/animacao';
+import { CartaoDestaque } from '../../src/components/CartaoDestaque';
 import { GraficoPizza } from '../../src/components/GraficoPizza';
 import { Cartao, Carregando, Titulo, Vazio } from '../../src/components/ui';
 import { useConsulta } from '../../src/hooks/useConsulta';
@@ -38,11 +40,14 @@ export default function TelaInvestimentos() {
   return (
     <View style={e.tela}>
       <ScrollView contentContainerStyle={e.conteudo}>
-        <Cartao>
-          <Text style={e.rotuloKpi}>Total investido</Text>
-          <Text style={e.valorTotal}>{formatarMoeda(total)}</Text>
-          <Text style={e.aviso}>Não entra no saldo total do Início.</Text>
-        </Cartao>
+        <Aparecer>
+          {/* Degrade roxo: o mesmo acento do cartao de investimentos no Inicio. */}
+          <CartaoDestaque de={cores.investimento} para={cores.gradienteB} idGradiente="investido">
+            <Text style={e.rotuloDestaque}>Total investido</Text>
+            <NumeroAnimado centavos={total} style={e.valorTotal} />
+            <Text style={e.avisoDestaque}>Não entra no saldo total do Início.</Text>
+          </CartaoDestaque>
+        </Aparecer>
 
         {carregando && !dados ? (
           <Carregando />
@@ -55,7 +60,7 @@ export default function TelaInvestimentos() {
           </Cartao>
         ) : (
           <>
-            <View style={e.grade}>
+            <Aparecer atraso={60} style={e.grade}>
               <Cartao style={e.kpi}>
                 <Text style={e.rotuloKpi}>Posições</Text>
                 <Text style={e.valorKpi}>{itens.length}</Text>
@@ -67,54 +72,62 @@ export default function TelaInvestimentos() {
                   {maior?.nome ?? '—'}
                 </Text>
               </Cartao>
-            </View>
+            </Aparecer>
 
             {fatias.length > 0 ? (
-              <Cartao>
-                <Titulo>Distribuição por banco</Titulo>
-                <View style={e.grafico}>
-                  <GraficoPizza dados={fatias} />
-                </View>
-              </Cartao>
+              <Aparecer atraso={120}>
+                <Cartao>
+                  <Titulo>Distribuição por banco</Titulo>
+                  <View style={e.grafico}>
+                    <GraficoPizza dados={fatias} />
+                  </View>
+                </Cartao>
+              </Aparecer>
             ) : null}
 
-            <Cartao>
-              <Titulo>Onde está</Titulo>
-              {itens.map((i) => (
-                <Pressable
-                  key={i.id}
-                  style={e.linha}
-                  onPress={() => router.push(`/investimento/${i.id}`)}
-                >
-                  <View style={[e.ponto, { backgroundColor: i.cor }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={e.nome} numberOfLines={1}>
-                      {i.nome}
-                    </Text>
-                    <Text style={e.atualizado}>
-                      Atualizado em {formatarData(i.atualizado_em.slice(0, 10))}
-                    </Text>
-                  </View>
-                  <View style={e.direita}>
-                    <Text style={e.valorLinha}>{formatarMoeda(i.valor)}</Text>
-                    <Text style={e.percentualLinha}>
-                      {total > 0 ? ((i.valor / total) * 100).toFixed(1) : '0,0'}%
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            </Cartao>
+            <Aparecer atraso={180}>
+              <Cartao>
+                <Titulo>Onde está</Titulo>
+                {itens.map((i) => (
+                  <Tocavel
+                    key={i.id}
+                    style={e.linha}
+                    onPress={() => router.push(`/investimento/${i.id}`)}
+                  >
+                    <View style={[e.avatar, { backgroundColor: i.cor + '26' }]}>
+                      <Text style={[e.avatarLetra, { color: i.cor }]}>
+                        {i.nome.trim().charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={e.nome} numberOfLines={1}>
+                        {i.nome}
+                      </Text>
+                      <Text style={e.atualizado}>
+                        Atualizado em {formatarData(i.atualizado_em.slice(0, 10))}
+                      </Text>
+                    </View>
+                    <View style={e.direita}>
+                      <Text style={e.valorLinha}>{formatarMoeda(i.valor)}</Text>
+                      <Text style={e.percentualLinha}>
+                        {total > 0 ? ((i.valor / total) * 100).toFixed(1) : '0.0'}%
+                      </Text>
+                    </View>
+                  </Tocavel>
+                ))}
+              </Cartao>
+            </Aparecer>
           </>
         )}
       </ScrollView>
 
-      <Pressable
+      <Tocavel
         style={e.fab}
         onPress={() => router.push('/investimento/novo')}
         accessibilityLabel="Novo investimento"
       >
         <Text style={e.fabTexto}>+</Text>
-      </Pressable>
+      </Tocavel>
     </View>
   );
 }
@@ -123,6 +136,16 @@ function criarEstilos(cores: Paleta) {
   return StyleSheet.create({
     tela: { flex: 1, backgroundColor: cores.fundo },
     conteudo: { padding: espaco.lg, gap: espaco.md, paddingBottom: 96 },
+    rotuloDestaque: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: cores.sobreDestaque,
+      opacity: 0.8,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+    },
+    valorTotal: { fontSize: 34, fontWeight: '800', color: cores.sobreDestaque, marginTop: espaco.xs },
+    avisoDestaque: { fontSize: 11, color: cores.sobreDestaque, opacity: 0.75, marginTop: espaco.xs },
     rotuloKpi: {
       fontSize: 12,
       fontWeight: '600',
@@ -130,8 +153,6 @@ function criarEstilos(cores: Paleta) {
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
-    valorTotal: { fontSize: 30, fontWeight: '800', color: cores.texto, marginTop: espaco.xs },
-    aviso: { fontSize: 11, color: cores.textoFraco, marginTop: 2 },
     grade: { flexDirection: 'row', gap: espaco.md },
     kpi: { flex: 1 },
     valorKpi: { fontSize: 22, fontWeight: '800', color: cores.texto, marginTop: espaco.xs },
@@ -141,11 +162,16 @@ function criarEstilos(cores: Paleta) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: espaco.md,
-      paddingVertical: espaco.md,
-      borderTopWidth: 1,
-      borderTopColor: cores.borda,
+      paddingVertical: espaco.sm,
     },
-    ponto: { width: 12, height: 12, borderRadius: 6 },
+    avatar: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarLetra: { fontSize: 16, fontWeight: '800' },
     nome: { fontSize: 15, fontWeight: '600', color: cores.texto },
     atualizado: { fontSize: 11, color: cores.textoFraco, marginTop: 2 },
     direita: { alignItems: 'flex-end' },
@@ -158,7 +184,7 @@ function criarEstilos(cores: Paleta) {
       width: 60,
       height: 60,
       borderRadius: 30,
-      backgroundColor: cores.primaria,
+      backgroundColor: cores.investimento,
       alignItems: 'center',
       justifyContent: 'center',
       elevation: 6,

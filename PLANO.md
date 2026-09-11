@@ -101,6 +101,8 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 | **D13** | **Metas** | Uma meta por categoria (`UNIQUE(categoria_id)`), **recorrente** — vale todo mês até ser mudada, não é recadastrada mês a mês. Trade-off aceito: não guarda histórico de "quanto era a meta em março". `ON DELETE CASCADE` com a categoria, diferente de `lancamentos` (D10): meta não tem gasto histórico dependendo dela para preservar. |
 | **D14** | **Movimentação interna** | Um único lançamento com `tipo = 'transferencia'`, `conta_id` = origem e `conta_destino_id` = destino — **não** dois lançamentos espelhados. Um par de linhas poderia ser editado pela metade e deixar o saldo torto para sempre; uma linha só não tem esse estado inválido. Fica fora de receitas, despesas, categorias e do gráfico por dia: mover dinheiro entre contas próprias não é ganho nem gasto (garantido por `CHECK`, e verificado em 6 testes). |
 | **D15** | **Cor em conta e investimento** | Toda entidade que aparece em gráfico tem cor própria escolhida pelo usuário (migrations 6 e 7). Paleta subiu de 12 para 24 tons, organizada por matiz. Alternativa descartada: gerar cor automática por hash do nome — dá cores repetidas e feias em listas pequenas, e o usuário não consegue corrigir. |
+| **D16** | **Eventos** | Evento (viagem, show) é uma **conta** com `tipo = 'evento'`: separar dinheiro é uma movimentação interna para ela, e os gastos saem dela. Escolha do usuário, contra a alternativa de "envelope" (gasto na conta real, marcado com o evento). Trade-off aceito e registrado: o saldo da conta de origem só bate com o extrato do banco se o dinheiro for de fato movido para uma conta/caixinha separada. Evento conta no saldo total (é dinheiro do usuário até ser gasto), mas tem seção própria no Início e some das listas de contas. |
+| **D17** | **Animações** | API `Animated` nativa do React Native, sem Reanimated: ele está no `node_modules` por causa dos `overrides`, mas exige plugin de Babel e já custou dois builds quebrados no SDK 57. Opacidade e transform rodam na thread nativa. Tudo respeita "Remover animações" do Android (`useMovimentoReduzido`). Entrada anima só na montagem da tela, não a cada recarga de dados; números animam do valor anterior ao novo, como feedback de que o lançamento entrou. |
 
 ---
 
@@ -126,6 +128,8 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 - [x] **RF09** — Movimentação interna entre contas (D14) — tipo de lançamento próprio, com `CHECK` no banco impedindo destino ausente, destino igual à origem e categoria
 - [x] **RF20** — Aba própria de Investimentos com KPIs (total, nº de posições, concentração da maior) e rosca de distribuição por banco
 - [x] **RF21** — Comparativos receita × despesa: total do mês e por conta
+- [x] **RF22** — Eventos (D16): criar com reserva inicial, registrar gasto e separar mais a partir do evento, encerrar e devolver a sobra
+- [x] **RF23** — Redesign do Início (degradê no saldo, cores das contas, cartão de investimentos, eventos ativos) e animações leves em todo o app (D17)
 
 ### v2 — evolução (congelado até a Fase 7)
 
@@ -188,7 +192,21 @@ lancamentos   (... tipo agora aceita 'transferencia',
 -- migrations 6 e 7
 contas        + cor TEXT NOT NULL DEFAULT '#546E7A'
 investimentos + cor TEXT NOT NULL DEFAULT '#1E88E5'
+
+-- migration 8: RECONSTRUCAO de contas, com FKs desligadas (ver abaixo)
+contas        (... tipo aceita 'evento', + data_inicio, data_fim,
+               CHECK: datas so em evento; fim >= inicio)
 ```
+
+**Sobre a migration 8.** Diferente da 5, a tabela reconstruída (`contas`) é
+**referenciada** por `lancamentos`. Com FK ligado, o `DROP TABLE` dispara o
+`ON DELETE RESTRICT` e aborta — e `PRAGMA foreign_keys` é ignorado dentro de
+transação. Por isso a migration carrega `desligaChavesEstrangeiras: true`, e o
+`migrar()` segue o procedimento oficial do SQLite: desliga as FKs **antes** do
+`BEGIN`, reconstrói, roda `PRAGMA foreign_key_check` (qualquer linha desfaz tudo)
+e religa no `finally`. O `verify` espelha esse ramo e prova as duas pontas: com o
+flag a migration preserva contas e saldos; **sem** ele, ela falha e o banco fica
+intacto na versão 7.
 
 **Sobre a migration 5.** É a primeira que reconstrói uma tabela em vez de só
 criar/alterar. O procedimento (tabela nova → copia → `DROP` → `RENAME` → recria
@@ -205,7 +223,7 @@ O composto `(data, tipo)` existe porque **toda** consulta do dashboard filtra pe
 (`valor >= 0` em investimentos, que aceita zero), `tipo` dentro do domínio, `ativo`
 e `sistema` booleanos.
 
-`user_version` atual: **7**. Backup (RF14/16) inclui as cinco tabelas; um backup
+`user_version` atual: **8**. Backup (RF14/16) inclui as cinco tabelas; um backup
 exportado antes da migration 3 ou 4 não tem `investimentos`/`metas` no JSON — a
 importação trata isso como lista vazia, não como erro. Restaurar valida também que
 toda meta aponta para uma categoria que existe no próprio arquivo.

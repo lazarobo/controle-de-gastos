@@ -1,4 +1,5 @@
-export type TipoConta = 'corrente' | 'poupanca' | 'cartao' | 'dinheiro';
+/** 'evento' (migration 8): viagem, show -- dinheiro separado e gasto de la. */
+export type TipoConta = 'corrente' | 'poupanca' | 'cartao' | 'dinheiro' | 'evento';
 
 /**
  * O que uma CATEGORIA classifica, e o eixo dos relatorios. Transferencia fica
@@ -19,7 +20,25 @@ export interface Conta {
   ativo: number;
   /** Hex, usado nos graficos comparativos por conta (migration 6). */
   cor: string;
+  /** 'YYYY-MM-DD', so em evento (CHECK no banco garante). */
+  data_inicio: string | null;
+  data_fim: string | null;
   criado_em: string;
+}
+
+/**
+ * Evento com os numeros que a tela precisa. Todos em centavos, e
+ * saldo = entrou - gasto - devolvido, a mesma conta que contas.saldos() faz.
+ */
+export interface EventoResumo {
+  conta: Conta;
+  /** Saldo inicial + receitas + transferencias recebidas (o "separado"). */
+  entrou: number;
+  /** Despesas lancadas a partir do evento. */
+  gasto: number;
+  /** Transferencias que sairam do evento (sobra devolvida). */
+  devolvido: number;
+  saldo: number;
 }
 
 export interface Categoria {

@@ -73,9 +73,11 @@ function ConteudoRaiz() {
         <Stack.Screen name="categoria/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="investimento/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meta/[id]" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="evento/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="contas" options={{ title: 'Contas' }} />
         <Stack.Screen name="categorias" options={{ title: 'Categorias' }} />
         <Stack.Screen name="metas" options={{ title: 'Metas' }} />
+        <Stack.Screen name="eventos" options={{ title: 'Eventos' }} />
       </Stack>
     </SafeAreaProvider>
   );

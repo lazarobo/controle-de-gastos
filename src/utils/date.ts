@@ -90,3 +90,37 @@ export function formatarMesAbreviado(chave: string): string {
 export function mesesIguais(a: Mes, b: Mes): boolean {
   return a.ano === b.ano && a.mes === b.mes;
 }
+
+/** Ontem, no fuso local. */
+export function ontemISO(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return dataParaISO(d);
+}
+
+/** Insere as barras enquanto o usuario digita 'DDMMAAAA', aceitando apagar. */
+export function mascararData(texto: string): string {
+  const d = texto.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+}
+
+/**
+ * 'DD/MM/AAAA' -> 'YYYY-MM-DD'. Retorna null para datas inexistentes como 31/02,
+ * que o construtor Date aceitaria silenciosamente virando 03/03.
+ */
+export function textoParaISO(texto: string): string | null {
+  const m = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return null;
+
+  const dia = Number(m[1]);
+  const mes = Number(m[2]);
+  const ano = Number(m[3]);
+
+  const d = new Date(ano, mes - 1, dia);
+  if (d.getFullYear() !== ano || d.getMonth() !== mes - 1 || d.getDate() !== dia) {
+    return null;
+  }
+  return dataParaISO(d);
+}

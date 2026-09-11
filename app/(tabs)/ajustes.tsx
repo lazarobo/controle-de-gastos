@@ -82,6 +82,11 @@ export default function Ajustes() {
           detalhe="Teto mensal de gasto por categoria"
           onPress={() => router.push('/metas')}
         />
+        <Item
+          rotulo="Eventos"
+          detalhe="Viagens, shows: dinheiro separado para um fim"
+          onPress={() => router.push('/eventos')}
+        />
       </Cartao>
 
       <Cartao>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { Aparecer, BarraProgresso } from '../../src/components/animacao';
 import { GraficoBarras } from '../../src/components/GraficoBarras';
 import { GraficoComparativo } from '../../src/components/GraficoComparativo';
 import { GraficoDias } from '../../src/components/GraficoDias';
@@ -14,7 +15,7 @@ import * as lancamentosRepo from '../../src/repos/lancamentos';
 import * as metasRepo from '../../src/repos/metas';
 import { formatarMoeda } from '../../src/utils/money';
 import { mesAtual, type Mes } from '../../src/utils/date';
-import { espaco, raio, type Paleta } from '../../src/utils/tema';
+import { espaco, type Paleta } from '../../src/utils/tema';
 import type {
   EvolucaoMes,
   FatiaGrafico,
@@ -35,6 +36,9 @@ interface Dados {
   resumo: ResumoMes;
 }
 
+/** Intervalo entre a entrada de um cartao e o seguinte. */
+const PASSO = 60;
+
 export default function Relatorios() {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
@@ -54,6 +58,8 @@ export default function Relatorios() {
     return { totais, metas, evolucao, porDia, porConta, resumo };
   }, [mes.ano, mes.mes, tipo]);
 
+  const despesa = tipo === 'despesa';
+
   return (
     <ScrollView style={e.tela} contentContainerStyle={e.conteudo}>
       <SeletorMes mes={mes} onChange={setMes} />
@@ -67,130 +73,140 @@ export default function Relatorios() {
         onChange={(v) => setTipo(v as TipoMovimento)}
       />
 
-      <Cartao>
-        <Titulo>
-          {tipo === 'despesa' ? 'Onde o dinheiro foi' : 'De onde o dinheiro veio'}
-        </Titulo>
-        {carregando && !dados ? (
-          <Carregando />
-        ) : !dados?.totais.length ? (
-          <Vazio
-            titulo={`Nenhuma ${tipo} neste mês`}
-            detalhe="O gráfico aparece assim que houver lançamentos."
-          />
-        ) : (
-          <View style={e.grafico}>
-            <GraficoPizza
-              dados={dados.totais.map<FatiaGrafico>((t) => ({
-                chave: String(t.categoria_id ?? 'sem'),
-                nome: t.categoria_nome,
-                cor: t.cor,
-                total: t.total,
-              }))}
-            />
-          </View>
-        )}
-      </Cartao>
-
-      {tipo === 'despesa' ? (
+      <Aparecer>
         <Cartao>
-          <Titulo>Gasto por dia</Titulo>
+          <Titulo>{despesa ? 'Onde o dinheiro foi' : 'De onde o dinheiro veio'}</Titulo>
           {carregando && !dados ? (
             <Carregando />
-          ) : !dados?.porDia.some((d) => d.total > 0) ? (
+          ) : !dados?.totais.length ? (
             <Vazio
-              titulo="Nenhum gasto neste mês"
-              detalhe="O gráfico aparece assim que houver despesas."
+              titulo={`Nenhuma ${tipo} neste mês`}
+              detalhe="O gráfico aparece assim que houver lançamentos."
             />
           ) : (
             <View style={e.grafico}>
-              <GraficoDias dados={dados.porDia} />
+              <GraficoPizza
+                dados={dados.totais.map<FatiaGrafico>((t) => ({
+                  chave: String(t.categoria_id ?? 'sem'),
+                  nome: t.categoria_nome,
+                  cor: t.cor,
+                  total: t.total,
+                }))}
+              />
             </View>
           )}
         </Cartao>
+      </Aparecer>
+
+      {despesa ? (
+        <Aparecer atraso={PASSO}>
+          <Cartao>
+            <Titulo>Gasto por dia</Titulo>
+            {carregando && !dados ? (
+              <Carregando />
+            ) : !dados?.porDia.some((d) => d.total > 0) ? (
+              <Vazio
+                titulo="Nenhum gasto neste mês"
+                detalhe="O gráfico aparece assim que houver despesas."
+              />
+            ) : (
+              <View style={e.grafico}>
+                <GraficoDias dados={dados.porDia} />
+              </View>
+            )}
+          </Cartao>
+        </Aparecer>
       ) : null}
 
-      {tipo === 'despesa' ? (
+      {despesa ? (
+        <Aparecer atraso={PASSO * 2}>
+          <Cartao>
+            <View style={e.cabecalhoMetas}>
+              <Titulo>Metas do mês</Titulo>
+              <Pressable onPress={() => router.push('/metas')} hitSlop={12}>
+                <Text style={e.gerenciar}>Gerenciar</Text>
+              </Pressable>
+            </View>
+            {carregando && !dados ? (
+              <Carregando />
+            ) : !dados?.metas.length ? (
+              <Vazio
+                titulo="Nenhuma meta cadastrada"
+                detalhe='Toque em "Gerenciar" para definir um teto mensal por categoria.'
+              />
+            ) : (
+              <View style={e.listaMetas}>
+                {dados.metas.map((m) => (
+                  <BarraMeta key={m.id} meta={m} />
+                ))}
+              </View>
+            )}
+          </Cartao>
+        </Aparecer>
+      ) : null}
+
+      <Aparecer atraso={PASSO * 3}>
         <Cartao>
-          <View style={e.cabecalhoMetas}>
-            <Titulo>Metas do mês</Titulo>
-            <Pressable onPress={() => router.push('/metas')} hitSlop={12}>
-              <Text style={e.gerenciar}>Gerenciar</Text>
-            </Pressable>
-          </View>
+          <Titulo>Receitas × despesas do mês</Titulo>
           {carregando && !dados ? (
             <Carregando />
-          ) : !dados?.metas.length ? (
-            <Vazio
-              titulo="Nenhuma meta cadastrada"
-              detalhe='Toque em "Gerenciar" para definir um teto mensal por categoria.'
-            />
+          ) : !dados || (dados.resumo.receitas === 0 && dados.resumo.despesas === 0) ? (
+            <Vazio titulo="Nenhum lançamento neste mês" />
           ) : (
-            <View style={e.listaMetas}>
-              {dados.metas.map((m) => (
-                <BarraMeta key={m.id} meta={m} />
-              ))}
+            <View style={e.grafico}>
+              <GraficoComparativo
+                linhas={[
+                  {
+                    chave: 'total',
+                    nome: 'Total do mês',
+                    receitas: dados.resumo.receitas,
+                    despesas: dados.resumo.despesas,
+                  },
+                ]}
+              />
             </View>
           )}
         </Cartao>
-      ) : null}
+      </Aparecer>
 
-      <Cartao>
-        <Titulo>Receitas × despesas do mês</Titulo>
-        {carregando && !dados ? (
-          <Carregando />
-        ) : !dados || (dados.resumo.receitas === 0 && dados.resumo.despesas === 0) ? (
-          <Vazio titulo="Nenhum lançamento neste mês" />
-        ) : (
-          <View style={e.grafico}>
-            <GraficoComparativo
-              linhas={[
-                {
-                  chave: 'total',
-                  nome: 'Total do mês',
-                  receitas: dados.resumo.receitas,
-                  despesas: dados.resumo.despesas,
-                },
-              ]}
+      <Aparecer atraso={PASSO * 4}>
+        <Cartao>
+          <Titulo>Por conta</Titulo>
+          {carregando && !dados ? (
+            <Carregando />
+          ) : !dados?.porConta.length ? (
+            <Vazio
+              titulo="Nenhuma conta movimentada neste mês"
+              detalhe="Movimentações internas não entram aqui — elas não são receita nem despesa."
             />
-          </View>
-        )}
-      </Cartao>
+          ) : (
+            <View style={e.grafico}>
+              <GraficoComparativo
+                linhas={dados.porConta.map((c) => ({
+                  chave: String(c.conta_id),
+                  nome: c.conta_nome,
+                  cor: c.cor,
+                  receitas: c.receitas,
+                  despesas: c.despesas,
+                }))}
+              />
+            </View>
+          )}
+        </Cartao>
+      </Aparecer>
 
-      <Cartao>
-        <Titulo>Por conta</Titulo>
-        {carregando && !dados ? (
-          <Carregando />
-        ) : !dados?.porConta.length ? (
-          <Vazio
-            titulo="Nenhuma conta movimentada neste mês"
-            detalhe="Movimentações internas não entram aqui — elas não são receita nem despesa."
-          />
-        ) : (
-          <View style={e.grafico}>
-            <GraficoComparativo
-              linhas={dados.porConta.map((c) => ({
-                chave: String(c.conta_id),
-                nome: c.conta_nome,
-                cor: c.cor,
-                receitas: c.receitas,
-                despesas: c.despesas,
-              }))}
-            />
-          </View>
-        )}
-      </Cartao>
-
-      <Cartao>
-        <Titulo>Evolução (6 meses)</Titulo>
-        {carregando && !dados ? (
-          <Carregando />
-        ) : (
-          <View style={e.grafico}>
-            <GraficoBarras dados={dados?.evolucao ?? []} />
-          </View>
-        )}
-      </Cartao>
+      <Aparecer atraso={PASSO * 5}>
+        <Cartao>
+          <Titulo>Evolução (6 meses)</Titulo>
+          {carregando && !dados ? (
+            <Carregando />
+          ) : (
+            <View style={e.grafico}>
+              <GraficoBarras dados={dados?.evolucao ?? []} />
+            </View>
+          )}
+        </Cartao>
+      </Aparecer>
     </ScrollView>
   );
 }
@@ -201,7 +217,6 @@ function BarraMeta({ meta }: { meta: MetaComProgresso }) {
 
   const fracao = meta.meta > 0 ? meta.gasto / meta.meta : 0;
   const estourou = meta.gasto > meta.meta;
-  const corBarra = estourou ? cores.despesa : meta.categoria_cor;
 
   return (
     <View style={e.linhaMeta}>
@@ -213,14 +228,12 @@ function BarraMeta({ meta }: { meta: MetaComProgresso }) {
           {formatarMoeda(meta.gasto)} / {formatarMoeda(meta.meta)}
         </Text>
       </View>
-      <View style={e.trilhaBarra}>
-        <View
-          style={[
-            e.progressoBarra,
-            { width: `${Math.min(100, fracao * 100)}%`, backgroundColor: corBarra },
-          ]}
-        />
-      </View>
+      {/* Preenche ao aparecer: a barra "enchendo" e o que torna a meta legivel de relance. */}
+      <BarraProgresso
+        fracao={fracao}
+        cor={estourou ? cores.despesa : meta.categoria_cor}
+        trilha={cores.superficieAlt}
+      />
       {estourou ? <Text style={e.avisoEstouro}>Estourou a meta</Text> : null}
     </View>
   );
@@ -242,13 +255,6 @@ function criarEstilos(cores: Paleta) {
     cabecalhoLinhaMeta: { flexDirection: 'row', justifyContent: 'space-between', gap: espaco.sm },
     nomeMeta: { flex: 1, fontSize: 14, color: cores.texto, fontWeight: '600' },
     valoresMeta: { fontSize: 12, color: cores.textoFraco },
-    trilhaBarra: {
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: cores.superficieAlt,
-      overflow: 'hidden',
-    },
-    progressoBarra: { height: '100%', borderRadius: 4 },
     avisoEstouro: { fontSize: 11, color: cores.despesa, fontWeight: '600' },
   });
 }

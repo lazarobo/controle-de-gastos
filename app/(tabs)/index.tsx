@@ -1,23 +1,37 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Link, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 
+import { Aparecer, NumeroAnimado, Tocavel } from '../../src/components/animacao';
+import { CartaoDestaque } from '../../src/components/CartaoDestaque';
+import { CartaoEvento } from '../../src/components/CartaoEvento';
 import { SeletorMes } from '../../src/components/SeletorMes';
 import { Cartao, Carregando, Titulo, Vazio } from '../../src/components/ui';
 import { useConsulta } from '../../src/hooks/useConsulta';
 import { useTema } from '../../src/contexto/TemaContexto';
 import * as contasRepo from '../../src/repos/contas';
+import * as eventosRepo from '../../src/repos/eventos';
+import * as investimentosRepo from '../../src/repos/investimentos';
 import * as lancamentosRepo from '../../src/repos/lancamentos';
-import { formatarMoeda } from '../../src/utils/money';
 import { mesAtual, type Mes } from '../../src/utils/date';
 import { espaco, raio, type Paleta } from '../../src/utils/tema';
-import type { ResumoMes, SaldoConta } from '../../src/types';
+import type { EventoResumo, ResumoMes, SaldoConta } from '../../src/types';
 
 interface DadosPainel {
   saldoTotal: number;
   resumo: ResumoMes;
-  saldos: SaldoConta[];
+  contas: SaldoConta[];
+  eventos: EventoResumo[];
+  investido: number;
+  posicoes: number;
 }
+
+const ROTULO_TIPO: Record<string, string> = {
+  corrente: 'Conta corrente',
+  poupanca: 'Poupança',
+  cartao: 'Cartão',
+  dinheiro: 'Dinheiro',
+};
 
 export default function Painel() {
   const { cores } = useTema();
@@ -26,12 +40,23 @@ export default function Painel() {
   const router = useRouter();
 
   const { dados, carregando } = useConsulta<DadosPainel>(async () => {
-    const [saldoTotal, resumo, saldos] = await Promise.all([
+    const [saldoTotal, resumo, saldos, eventos, investido, investimentos] = await Promise.all([
       contasRepo.saldoTotal(),
       lancamentosRepo.resumoMes(mes),
       contasRepo.saldos(),
+      eventosRepo.listar(),
+      investimentosRepo.total(),
+      investimentosRepo.listar(),
     ]);
-    return { saldoTotal, resumo, saldos };
+    return {
+      saldoTotal,
+      resumo,
+      // Eventos tambem sao contas, mas ganham secao propria logo abaixo.
+      contas: saldos.filter((s) => s.conta.tipo !== 'evento'),
+      eventos,
+      investido,
+      posicoes: investimentos.length,
+    };
   }, [mes.ano, mes.mes]);
 
   return (
@@ -43,95 +68,143 @@ export default function Painel() {
           <Carregando />
         ) : dados ? (
           <>
-            <Cartao>
-              <Text style={e.rotuloSaldo}>Saldo total das contas ativas</Text>
-              <Text
-                style={[
-                  e.saldoTotal,
-                  { color: dados.saldoTotal < 0 ? cores.despesa : cores.texto },
-                ]}
-              >
-                {formatarMoeda(dados.saldoTotal)}
-              </Text>
-            </Cartao>
+            <Aparecer>
+              <CartaoDestaque de={cores.gradienteA} para={cores.gradienteB}>
+                <Text style={e.rotuloDestaque}>Saldo total</Text>
+                <NumeroAnimado centavos={dados.saldoTotal} style={e.saldoTotal} />
+                <View style={e.pilulas}>
+                  <View style={e.pilula}>
+                    <Text style={e.pilulaRotulo}>↑ Receitas</Text>
+                    <NumeroAnimado centavos={dados.resumo.receitas} style={e.pilulaValor} />
+                  </View>
+                  <View style={e.pilula}>
+                    <Text style={e.pilulaRotulo}>↓ Despesas</Text>
+                    <NumeroAnimado centavos={dados.resumo.despesas} style={e.pilulaValor} />
+                  </View>
+                </View>
+              </CartaoDestaque>
+            </Aparecer>
 
-            <View style={e.grade}>
-              <Kpi rotulo="Receitas" valor={dados.resumo.receitas} cor={cores.receita} />
-              <Kpi rotulo="Despesas" valor={dados.resumo.despesas} cor={cores.despesa} />
-            </View>
+            <Aparecer atraso={60}>
+              <Cartao style={e.linhaResultado}>
+                <View style={{ flex: 1 }}>
+                  <Text style={e.rotulo}>Resultado do mês</Text>
+                  <Text style={e.explicacao}>receitas − despesas</Text>
+                </View>
+                <NumeroAnimado
+                  centavos={dados.resumo.resultado}
+                  comSinal
+                  style={[
+                    e.resultado,
+                    {
+                      color:
+                        dados.resumo.resultado < 0
+                          ? cores.despesa
+                          : dados.resumo.resultado > 0
+                            ? cores.receita
+                            : cores.texto,
+                    },
+                  ]}
+                />
+              </Cartao>
+            </Aparecer>
 
-            <Cartao>
-              <Text style={e.rotuloSaldo}>Resultado do mês</Text>
-              <Text
+            <Aparecer atraso={120}>
+              <Cartao>
+                <Titulo>Contas</Titulo>
+                {dados.contas.length === 0 ? (
+                  <Vazio
+                    titulo="Nenhuma conta cadastrada"
+                    detalhe="Cadastre suas contas em Ajustes › Contas."
+                  />
+                ) : (
+                  dados.contas.map(({ conta, saldo }) => (
+                    <Tocavel
+                      key={conta.id}
+                      style={e.linhaConta}
+                      onPress={() => router.push(`/conta/${conta.id}`)}
+                    >
+                      {/* A cor da conta, que antes so aparecia em grafico. */}
+                      <View style={[e.avatar, { backgroundColor: conta.cor + '26' }]}>
+                        <Text style={[e.avatarLetra, { color: conta.cor }]}>
+                          {conta.nome.trim().charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={e.nomeConta} numberOfLines={1}>
+                          {conta.nome}
+                        </Text>
+                        <Text style={e.tipoConta}>{ROTULO_TIPO[conta.tipo] ?? conta.tipo}</Text>
+                      </View>
+                      <NumeroAnimado
+                        centavos={saldo}
+                        style={[e.valorConta, { color: saldo < 0 ? cores.despesa : cores.texto }]}
+                      />
+                    </Tocavel>
+                  ))
+                )}
+              </Cartao>
+            </Aparecer>
+
+            <Aparecer atraso={180}>
+              <Tocavel
+                onPress={() => router.push('/investimentos')}
                 style={[
-                  e.resultado,
+                  e.cartaoInvestimento,
                   {
-                    color:
-                      dados.resumo.resultado < 0
-                        ? cores.despesa
-                        : dados.resumo.resultado > 0
-                          ? cores.receita
-                          : cores.texto,
+                    backgroundColor: cores.investimento + '1F',
+                    borderColor: cores.investimento + '55',
                   },
                 ]}
               >
-                {dados.resumo.resultado > 0 ? '+' : ''}
-                {formatarMoeda(dados.resumo.resultado)}
-              </Text>
-              <Text style={e.explicacao}>receitas do mês − despesas do mês</Text>
-            </Cartao>
-
-            <Cartao>
-              <Titulo>Saldo por conta</Titulo>
-              {dados.saldos.length === 0 ? (
-                <Vazio
-                  titulo="Nenhuma conta cadastrada"
-                  detalhe="Cadastre suas contas em Ajustes › Contas."
+                <View style={[e.iconeInvestimento, { backgroundColor: cores.investimento }]}>
+                  <Text style={e.iconeTexto}>▲</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={e.rotulo}>Investido</Text>
+                  <Text style={e.explicacao}>
+                    {dados.posicoes === 0
+                      ? 'toque para cadastrar'
+                      : `${dados.posicoes} ${dados.posicoes === 1 ? 'posição' : 'posições'} · fora do saldo`}
+                  </Text>
+                </View>
+                <NumeroAnimado
+                  centavos={dados.investido}
+                  style={[e.valorInvestido, { color: cores.investimento }]}
                 />
-              ) : (
-                dados.saldos.map(({ conta, saldo }) => (
-                  <Link key={conta.id} href={`/conta/${conta.id}`} asChild>
-                    <Pressable style={e.linhaConta}>
-                      <Text style={e.nomeConta} numberOfLines={1}>
-                        {conta.nome}
-                      </Text>
-                      <Text
-                        style={[
-                          e.valorConta,
-                          { color: saldo < 0 ? cores.despesa : cores.texto },
-                        ]}
-                      >
-                        {formatarMoeda(saldo)}
-                      </Text>
-                    </Pressable>
-                  </Link>
-                ))
-              )}
-            </Cartao>
+              </Tocavel>
+            </Aparecer>
+
+            {dados.eventos.length > 0 ? (
+              <Aparecer atraso={240} style={e.secaoEventos}>
+                <View style={e.cabecalhoSecao}>
+                  <Titulo>Eventos</Titulo>
+                  <Pressable onPress={() => router.push('/eventos')} hitSlop={12}>
+                    <Text style={e.verTodos}>Ver todos</Text>
+                  </Pressable>
+                </View>
+                {dados.eventos.map((ev) => (
+                  <CartaoEvento
+                    key={ev.conta.id}
+                    evento={ev}
+                    onPress={() => router.push(`/evento/${ev.conta.id}`)}
+                  />
+                ))}
+              </Aparecer>
+            ) : null}
           </>
         ) : null}
       </ScrollView>
 
       {/* RNF02: 1 toque no botao, digitar o valor, 1 toque em salvar. */}
-      <Pressable
+      <Tocavel
         style={e.fab}
         onPress={() => router.push('/lancamento/novo')}
         accessibilityLabel="Registrar gasto"
       >
         <Text style={e.fabTexto}>+</Text>
-      </Pressable>
+      </Tocavel>
     </View>
-  );
-}
-
-function Kpi({ rotulo, valor, cor }: { rotulo: string; valor: number; cor: string }) {
-  const { cores } = useTema();
-  const e = useMemo(() => criarEstilos(cores), [cores]);
-  return (
-    <Cartao style={e.kpi}>
-      <Text style={e.rotuloSaldo}>{rotulo}</Text>
-      <Text style={[e.valorKpi, { color: cor }]}>{formatarMoeda(valor)}</Text>
-    </Cartao>
   );
 }
 
@@ -139,30 +212,81 @@ function criarEstilos(cores: Paleta) {
   return StyleSheet.create({
     tela: { flex: 1, backgroundColor: cores.fundo },
     conteudo: { padding: espaco.lg, gap: espaco.md, paddingBottom: 96 },
-    rotuloSaldo: {
+    rotuloDestaque: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: cores.sobreDestaque,
+      opacity: 0.8,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+    },
+    saldoTotal: {
+      fontSize: 34,
+      fontWeight: '800',
+      color: cores.sobreDestaque,
+      marginTop: espaco.xs,
+    },
+    pilulas: { flexDirection: 'row', gap: espaco.sm, marginTop: espaco.lg },
+    pilula: {
+      flex: 1,
+      backgroundColor: 'rgba(255,255,255,0.14)',
+      borderRadius: raio.md,
+      paddingVertical: espaco.sm,
+      paddingHorizontal: espaco.md,
+    },
+    pilulaRotulo: { fontSize: 11, color: cores.sobreDestaque, opacity: 0.85 },
+    pilulaValor: { fontSize: 16, fontWeight: '700', color: cores.sobreDestaque, marginTop: 2 },
+    rotulo: {
       fontSize: 12,
       fontWeight: '600',
       color: cores.textoFraco,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
-    saldoTotal: { fontSize: 30, fontWeight: '800', color: cores.texto, marginTop: espaco.xs },
-    grade: { flexDirection: 'row', gap: espaco.md },
-    kpi: { flex: 1 },
-    valorKpi: { fontSize: 19, fontWeight: '700', marginTop: espaco.xs },
-    resultado: { fontSize: 24, fontWeight: '800', marginTop: espaco.xs },
     explicacao: { fontSize: 11, color: cores.textoFraco, marginTop: 2 },
+    linhaResultado: { flexDirection: 'row', alignItems: 'center', gap: espaco.md },
+    resultado: { fontSize: 22, fontWeight: '800' },
     linhaConta: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: espaco.md,
-      borderTopWidth: 1,
-      borderTopColor: cores.borda,
       gap: espaco.md,
+      paddingVertical: espaco.sm,
     },
-    nomeConta: { flex: 1, fontSize: 15, color: cores.texto },
+    avatar: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarLetra: { fontSize: 16, fontWeight: '800' },
+    nomeConta: { fontSize: 15, fontWeight: '600', color: cores.texto },
+    tipoConta: { fontSize: 11, color: cores.textoFraco, marginTop: 1 },
     valorConta: { fontSize: 15, fontWeight: '700' },
+    cartaoInvestimento: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: espaco.md,
+      borderRadius: raio.md,
+      borderWidth: 1,
+      padding: espaco.lg,
+    },
+    iconeInvestimento: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    iconeTexto: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+    valorInvestido: { fontSize: 18, fontWeight: '800' },
+    secaoEventos: { gap: espaco.sm },
+    cabecalhoSecao: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    verTodos: { color: cores.primaria, fontSize: 13, fontWeight: '700' },
     fab: {
       position: 'absolute',
       right: espaco.lg,
