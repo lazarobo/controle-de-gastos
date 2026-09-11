@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
-import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SectionList, StyleSheet, Text } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 
+import { Tocavel } from '../src/components/animacao';
+import { Avatar } from '../src/components/Avatar';
 import { Carregando, Vazio } from '../src/components/ui';
 import { useConsulta } from '../src/hooks/useConsulta';
 import { useTema } from '../src/contexto/TemaContexto';
@@ -46,13 +48,13 @@ export default function ListaCategorias() {
           <Text style={e.secao}>{section.title}</Text>
         )}
         renderItem={({ item }) => (
-          <Pressable style={e.item} onPress={() => router.push(`/categoria/${item.id}`)}>
-            <View style={[e.ponto, { backgroundColor: item.cor }]} />
+          <Tocavel style={e.item} onPress={() => router.push(`/categoria/${item.id}`)}>
+            <Avatar nome={item.nome} cor={item.cor} tamanho={34} />
             <Text style={e.nome} numberOfLines={1}>
               {item.nome}
             </Text>
             {item.sistema === 1 ? <Text style={e.tag}>sistema</Text> : null}
-          </Pressable>
+          </Tocavel>
         )}
       />
     </>
@@ -84,7 +86,6 @@ function criarEstilos(cores: Paleta) {
       padding: espaco.md,
       marginBottom: espaco.sm,
     },
-    ponto: { width: 14, height: 14, borderRadius: 7 },
     nome: { flex: 1, fontSize: 15, color: cores.texto },
     tag: {
       fontSize: 10,
