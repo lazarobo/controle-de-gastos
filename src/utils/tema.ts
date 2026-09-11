@@ -20,6 +20,13 @@ export const paletaClara = {
   transferencia: '#5E6C7A',
   perigo: '#C62828',
   neutra: '#9E9E9E',
+  /** Degrade do cartao de saldo no Inicio (topo-esquerda -> base-direita). */
+  gradienteA: '#1E6FD9',
+  gradienteB: '#5B3FD6',
+  /** Texto sobre o degrade: branco nos dois temas, o fundo e sempre escuro. */
+  sobreDestaque: '#FFFFFF',
+  /** Acento de investimentos: roxo, distinto de receita/despesa/primaria. */
+  investimento: '#7B4DFF',
 };
 
 export const paletaEscura: Paleta = {
@@ -36,6 +43,10 @@ export const paletaEscura: Paleta = {
   transferencia: '#8A99A8',
   perigo: '#E5695F',
   neutra: '#7A8794',
+  gradienteA: '#2A5FB8',
+  gradienteB: '#4B2FA8',
+  sobreDestaque: '#FFFFFF',
+  investimento: '#A58BFF',
 };
 
 export const espaco = {

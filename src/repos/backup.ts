@@ -132,12 +132,16 @@ export async function importar(): Promise<ResultadoImportacao> {
 
     for (const c of backup.contas) {
       await db.runAsync(
-        `INSERT INTO contas (id, nome, tipo, saldo_inicial, ativo, cor, criado_em)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO contas
+           (id, nome, tipo, saldo_inicial, ativo, cor, data_inicio, data_fim, criado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         c.id, c.nome, c.tipo, c.saldo_inicial, c.ativo,
         // Backup anterior a migration 6 nao tem cor: cai no mesmo cinza que a
         // migration deu as contas que ja existiam, para o app ficar coerente.
         c.cor ?? '#546E7A',
+        // Anterior a migration 8: nao ha eventos, entao datas sao sempre null.
+        c.data_inicio ?? null,
+        c.data_fim ?? null,
         c.criado_em ?? new Date().toISOString(),
       );
     }

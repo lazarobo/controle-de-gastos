@@ -50,3 +50,7 @@ credentials.json
 # generated native folders
 /ios
 /android
+
+# Configuracao de editor de outros projetos (ex.: extensao TOTVS/Protheus),
+# com caminhos locais da maquina -- nao pertence a este repositorio.
+.vscode/

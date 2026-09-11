@@ -34,7 +34,9 @@ export default function ListaContas() {
       <FlatList
         style={e.tela}
         contentContainerStyle={e.conteudo}
-        data={dados ?? []}
+        // Eventos tambem sao contas (migration 8), mas tem tela propria em
+        // Ajustes › Eventos; aqui ficam so as contas do dia a dia.
+        data={(dados ?? []).filter((s) => s.conta.tipo !== 'evento')}
         keyExtractor={(item) => String(item.conta.id)}
         ListEmptyComponent={
           carregando ? (

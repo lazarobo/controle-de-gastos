@@ -21,7 +21,9 @@ import {
   formatarData,
   intervaloDoMes,
   isoParaData,
+  mascararData,
   somarMeses,
+  textoParaISO,
 } from '../src/utils/date.ts';
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -124,6 +126,48 @@ teste('somarMeses atravessa o ano nos dois sentidos', () => {
   assert.deepEqual(somarMeses({ ano: 2026, mes: 8 }, -14), { ano: 2025, mes: 6 });
 });
 
+teste('textoParaISO aceita data valida e recusa data inexistente', () => {
+  assert.equal(textoParaISO('25/08/2026'), '2026-08-25');
+  assert.equal(textoParaISO('31/02/2026'), null, '31/02 viraria 03/03 sem a checagem');
+  assert.equal(textoParaISO('29/02/2024'), '2024-02-29');
+  assert.equal(textoParaISO('2026-08-25'), null);
+  assert.equal(textoParaISO('5/8/2026'), null);
+});
+
+teste('mascararData insere as barras e ignora o que nao e digito', () => {
+  assert.equal(mascararData('2508'), '25/08');
+  assert.equal(mascararData('25082026'), '25/08/2026');
+  assert.equal(mascararData('25/08/2026'), '25/08/2026');
+  assert.equal(mascararData('250820269999'), '25/08/2026');
+});
+
+/**
+ * Espelha o migrar() de src/db/migrations.ts, INCLUSIVE o ramo que desliga as
+ * FKs fora da transacao. Se este script aplicasse tudo do jeito antigo, a
+ * migration 8 quebraria aqui por um motivo que o app nao tem -- ou pior, se
+ * alguem "consertasse" o teste, deixaria de testar o que o app executa.
+ */
+function aplicarMigration(b: DatabaseSync, m: (typeof MIGRATIONS)[number]) {
+  if (!m.desligaChavesEstrangeiras) {
+    b.exec(`BEGIN;${m.sql};PRAGMA user_version = ${m.versao};COMMIT;`);
+    return;
+  }
+  b.exec('PRAGMA foreign_keys = OFF');
+  try {
+    b.exec('BEGIN');
+    b.exec(m.sql);
+    const orfas = b.prepare('PRAGMA foreign_key_check').all();
+    if (orfas.length > 0) throw new Error(`referencias orfas: ${JSON.stringify(orfas)}`);
+    b.exec(`PRAGMA user_version = ${m.versao}`);
+    b.exec('COMMIT');
+  } catch (erro) {
+    try { b.exec('ROLLBACK'); } catch {}
+    throw erro;
+  } finally {
+    b.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
 // ---------------------------------------------------------------- banco
 
 console.log('\nbanco');
@@ -138,9 +182,7 @@ db.exec('PRAGMA foreign_keys = ON');
  * migrations: um rebuild de tabela (migration 5) so quebra quando roda depois
  * das anteriores, com dados dentro.
  */
-for (const m of MIGRATIONS) {
-  db.exec(`BEGIN;${m.sql};PRAGMA user_version = ${m.versao};COMMIT;`);
-}
+for (const m of MIGRATIONS) aplicarMigration(db, m);
 
 teste('schema cria as tres tabelas e os indices', () => {
   const nomes = db
@@ -443,7 +485,7 @@ function bancoNaVersao(versaoMax: number): DatabaseSync {
   b.exec('PRAGMA foreign_keys = ON');
   for (const m of MIGRATIONS) {
     if (m.versao > versaoMax) continue;
-    b.exec(`BEGIN;${m.sql};PRAGMA user_version = ${m.versao};COMMIT;`);
+    aplicarMigration(b, m);
   }
   return b;
 }
@@ -459,7 +501,7 @@ antigo.exec(`
 `);
 
 const migration5 = MIGRATIONS.find((m) => m.versao === 5)!;
-antigo.exec(`BEGIN;${migration5.sql};PRAGMA user_version = 5;COMMIT;`);
+aplicarMigration(antigo, migration5);
 
 teste('rebuild preserva os lancamentos que ja existiam, campo a campo', () => {
   const l: any = antigo.prepare('SELECT * FROM lancamentos WHERE id = 1').get();
@@ -670,6 +712,116 @@ teste('migration 6/7: contas e investimentos ganharam cor com default utilizavel
 
 tr.close();
 antigo.close();
+
+// -------------------------------------------- migration 8 (rebuild de contas)
+
+console.log('\nmigration 8 — rebuild de contas (tabela referenciada)');
+
+function bancoV7ComDados(): DatabaseSync {
+  const b = bancoNaVersao(7);
+  b.exec(`
+    INSERT INTO contas (id, nome, tipo, saldo_inicial, cor) VALUES
+      (1, 'Nubank', 'corrente', 100000, '#8E24AA'),
+      (2, 'Carteira', 'dinheiro', 5000, '#43A047');
+    INSERT INTO lancamentos (descricao, valor, tipo, data, conta_id)
+      VALUES ('Mercado', 20000, 'despesa', '2026-09-01', 1);
+    INSERT INTO lancamentos (descricao, valor, tipo, data, conta_id, conta_destino_id)
+      VALUES ('Nubank -> Carteira', 3000, 'transferencia', '2026-09-02', 1, 2);
+  `);
+  return b;
+}
+
+const migration8 = MIGRATIONS.find((m) => m.versao === 8)!;
+
+teste('sem desligar as FKs, a migration 8 FALHA (prova que o flag e necessario)', () => {
+  const b = bancoV7ComDados();
+  assert.throws(() =>
+    b.exec(`BEGIN;${migration8.sql};PRAGMA user_version = 8;COMMIT;`),
+  );
+  try { b.exec('ROLLBACK'); } catch {}
+  const v: any = b.prepare('PRAGMA user_version').get();
+  assert.equal(v.user_version, 7, 'falha tem de deixar o banco intacto na versao 7');
+  b.close();
+});
+
+const v8 = bancoV7ComDados();
+aplicarMigration(v8, migration8);
+
+teste('rebuild de contas preserva as contas campo a campo (inclusive a cor)', () => {
+  const c: any = v8.prepare('SELECT * FROM contas WHERE id = 1').get();
+  assert.equal(c.nome, 'Nubank');
+  assert.equal(c.tipo, 'corrente');
+  assert.equal(c.saldo_inicial, 100000);
+  assert.equal(c.cor, '#8E24AA');
+  assert.equal(c.data_inicio, null);
+});
+
+teste('lancamentos continuam apontando para as contas certas', () => {
+  const sql = sqlDoArquivo('src/repos/contas.ts', 'AS saldo').replace('${filtro}', '');
+  const linhas: any[] = v8.prepare(sql).all();
+  // Nubank: 1.000 - 200 - 30 = 770 ; Carteira: 50 + 30 = 80
+  assert.equal(linhas.find((l) => l.id === 1).saldo, 77000);
+  assert.equal(linhas.find((l) => l.id === 2).saldo, 8000);
+});
+
+teste('FKs religadas depois: RESTRICT de contas continua valendo', () => {
+  const fk: any = v8.prepare('PRAGMA foreign_keys').get();
+  assert.equal(fk.foreign_keys, 1, 'o runner tem de religar as FKs');
+  assert.throws(() => v8.exec('DELETE FROM contas WHERE id = 1'), /FOREIGN KEY/i);
+});
+
+teste('foreign_key_check limpo e versao 8 gravada', () => {
+  assert.equal(v8.prepare('PRAGMA foreign_key_check').all().length, 0);
+  const v: any = v8.prepare('PRAGMA user_version').get();
+  assert.equal(v.user_version, 8);
+});
+
+teste('CHECK: aceita tipo evento com datas; recusa datas em conta comum', () => {
+  v8.exec(
+    "INSERT INTO contas (nome, tipo, data_inicio, data_fim) VALUES ('Floripa', 'evento', '2026-10-10', '2026-10-15')",
+  );
+  assert.throws(() =>
+    v8.exec("INSERT INTO contas (nome, tipo, data_inicio) VALUES ('X', 'corrente', '2026-10-10')"),
+  );
+});
+
+teste('CHECK: evento nao pode terminar antes de comecar', () => {
+  assert.throws(() =>
+    v8.exec(
+      "INSERT INTO contas (nome, tipo, data_inicio, data_fim) VALUES ('Y', 'evento', '2026-10-15', '2026-10-10')",
+    ),
+  );
+});
+
+teste('eventos.listar separa entrou, gasto e devolvido (SQL real do repo)', () => {
+  const floripa: any = v8.prepare("SELECT id FROM contas WHERE nome = 'Floripa'").get();
+  v8.exec(`
+    INSERT INTO lancamentos (descricao, valor, tipo, data, conta_id, conta_destino_id)
+      VALUES ('Reserva', 50000, 'transferencia', '2026-10-01', 1, ${floripa.id});
+    INSERT INTO lancamentos (descricao, valor, tipo, data, conta_id)
+      VALUES ('Jantar', 12000, 'despesa', '2026-10-11', ${floripa.id});
+    INSERT INTO lancamentos (descricao, valor, tipo, data, conta_id, conta_destino_id)
+      VALUES ('Sobra', 8000, 'transferencia', '2026-10-16', ${floripa.id}, 1);
+  `);
+
+  const sql = sqlDoArquivo('src/repos/eventos.ts', 'AS devolvido').replace('${filtro}', '');
+  const e: any = v8.prepare(sql).all().find((l: any) => l.id === floripa.id);
+
+  assert.equal(e.entrou, 50000, 'reserva de 500,00');
+  assert.equal(e.gasto, 12000, 'so o jantar e gasto');
+  assert.equal(e.devolvido, 8000, 'devolver a sobra NAO e gastar');
+  // Mesma conta que contas.saldos() faz: 500 - 120 - 80 = 300
+  assert.equal(e.entrou - e.gasto - e.devolvido, 30000);
+});
+
+teste('evento bate com contas.saldos() (as duas contabilidades nao divergem)', () => {
+  const floripa: any = v8.prepare("SELECT id FROM contas WHERE nome = 'Floripa'").get();
+  const sqlSaldos = sqlDoArquivo('src/repos/contas.ts', 'AS saldo').replace('${filtro}', '');
+  const s: any = v8.prepare(sqlSaldos).all().find((l: any) => l.id === floripa.id);
+  assert.equal(s.saldo, 30000);
+});
+
+v8.close();
 
 db.close();
 
