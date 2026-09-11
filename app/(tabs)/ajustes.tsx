@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { Tocavel } from '../../src/components/animacao';
+import { Avatar } from '../../src/components/Avatar';
 import { Botao, Cartao, Chips, Rotulo, Titulo } from '../../src/components/ui';
 import * as backup from '../../src/repos/backup';
 import { NOME_BANCO } from '../../src/db';
@@ -71,20 +73,32 @@ export default function Ajustes() {
     <ScrollView style={e.tela} contentContainerStyle={e.conteudo}>
       <Cartao>
         <Titulo>Cadastros</Titulo>
-        <Item rotulo="Contas" detalhe="Onde o dinheiro fica" onPress={() => router.push('/contas')} />
+        <Item
+          rotulo="Contas"
+          detalhe="Onde o dinheiro fica"
+          glifo="$"
+          cor="#1E88E5"
+          onPress={() => router.push('/contas')}
+        />
         <Item
           rotulo="Categorias"
           detalhe="Em que o dinheiro é gasto"
+          glifo="#"
+          cor="#FB8C00"
           onPress={() => router.push('/categorias')}
         />
         <Item
           rotulo="Metas"
           detalhe="Teto mensal de gasto por categoria"
+          glifo="%"
+          cor="#43A047"
           onPress={() => router.push('/metas')}
         />
         <Item
           rotulo="Eventos"
           detalhe="Viagens, shows: dinheiro separado para um fim"
+          glifo="★"
+          cor="#8E24AA"
           onPress={() => router.push('/eventos')}
         />
       </Cartao>
@@ -129,22 +143,28 @@ export default function Ajustes() {
 function Item({
   rotulo,
   detalhe,
+  glifo,
+  cor,
   onPress,
 }: {
   rotulo: string;
   detalhe: string;
+  /** Icone do item: um simbolo sobre circulo colorido, como os avatares. */
+  glifo: string;
+  cor: string;
   onPress: () => void;
 }) {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
   return (
-    <Pressable style={e.item} onPress={onPress}>
+    <Tocavel style={e.item} onPress={onPress}>
+      <Avatar nome={rotulo} cor={cor} glifo={glifo} tamanho={36} />
       <View style={{ flex: 1 }}>
         <Text style={e.itemRotulo}>{rotulo}</Text>
         <Text style={e.itemDetalhe}>{detalhe}</Text>
       </View>
       <Text style={e.seta}>›</Text>
-    </Pressable>
+    </Tocavel>
   );
 }
 
@@ -159,6 +179,7 @@ function criarEstilos(cores: Paleta) {
     item: {
       flexDirection: 'row',
       alignItems: 'center',
+      gap: espaco.md,
       paddingVertical: espaco.md,
       borderTopWidth: 1,
       borderTopColor: cores.borda,

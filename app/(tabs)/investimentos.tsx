@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { Aparecer, NumeroAnimado, Tocavel } from '../../src/components/animacao';
+import { Avatar } from '../../src/components/Avatar';
 import { CartaoDestaque } from '../../src/components/CartaoDestaque';
 import { GraficoPizza } from '../../src/components/GraficoPizza';
 import { Cartao, Carregando, Titulo, Vazio } from '../../src/components/ui';
@@ -94,11 +95,7 @@ export default function TelaInvestimentos() {
                     style={e.linha}
                     onPress={() => router.push(`/investimento/${i.id}`)}
                   >
-                    <View style={[e.avatar, { backgroundColor: i.cor + '26' }]}>
-                      <Text style={[e.avatarLetra, { color: i.cor }]}>
-                        {i.nome.trim().charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
+                    <Avatar nome={i.nome} cor={i.cor} />
                     <View style={{ flex: 1 }}>
                       <Text style={e.nome} numberOfLines={1}>
                         {i.nome}

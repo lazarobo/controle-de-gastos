@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Botao, Campo, Carregando, Chips, Rotulo } from '../../src/components/ui';
 import { SeletorCor } from '../../src/components/SeletorCor';
+import { Avatar } from '../../src/components/Avatar';
 import * as contasRepo from '../../src/repos/contas';
 import { formatarValor, parseMoeda } from '../../src/utils/money';
 import { useTema } from '../../src/contexto/TemaContexto';
@@ -162,6 +163,17 @@ export default function FormularioConta() {
         />
 
         <View style={e.grupo}>
+          <View style={e.previa}>
+            <Avatar nome={nome || '?'} cor={cor} tamanho={44} />
+            <Text style={e.previaTexto}>
+              A cor identifica a conta no Início, na lista de contas e nos gráficos.
+            </Text>
+          </View>
+          <Rotulo>Cor da conta</Rotulo>
+          <SeletorCor cor={cor} onChange={setCor} />
+        </View>
+
+        <View style={e.grupo}>
           <Rotulo>Tipo</Rotulo>
           <Chips
             itens={TIPOS_CONTA.map((t) => ({ valor: t.valor, rotulo: t.rotulo }))}
@@ -183,11 +195,6 @@ export default function FormularioConta() {
           categoria "Ajuste de saldo" — nunca mexendo neste campo, ou os meses
           passados deixam de fechar.
         </Text>
-
-        <View style={e.grupo}>
-          <Rotulo>Cor nos gráficos</Rotulo>
-          <SeletorCor cor={cor} onChange={setCor} />
-        </View>
 
         <View style={e.linhaSwitch}>
           <View style={{ flex: 1 }}>
@@ -218,6 +225,8 @@ function criarEstilos(cores: Paleta) {
     grupo: { marginBottom: espaco.lg },
     ajuda: { fontSize: 12, color: cores.textoFraco, marginTop: -espaco.sm, marginBottom: espaco.lg },
     linhaSwitch: { flexDirection: 'row', alignItems: 'center', gap: espaco.md },
+    previa: { flexDirection: 'row', alignItems: 'center', gap: espaco.md, marginBottom: espaco.md },
+    previaTexto: { flex: 1, fontSize: 12, color: cores.textoFraco, lineHeight: 17 },
     acoes: { gap: espaco.sm, marginTop: espaco.lg },
   });
 }

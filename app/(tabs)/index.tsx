@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { Aparecer, NumeroAnimado, Tocavel } from '../../src/components/animacao';
+import { Avatar } from '../../src/components/Avatar';
 import { CartaoDestaque } from '../../src/components/CartaoDestaque';
 import { CartaoEvento } from '../../src/components/CartaoEvento';
 import { SeletorMes } from '../../src/components/SeletorMes';
@@ -124,12 +125,7 @@ export default function Painel() {
                       style={e.linhaConta}
                       onPress={() => router.push(`/conta/${conta.id}`)}
                     >
-                      {/* A cor da conta, que antes so aparecia em grafico. */}
-                      <View style={[e.avatar, { backgroundColor: conta.cor + '26' }]}>
-                        <Text style={[e.avatarLetra, { color: conta.cor }]}>
-                          {conta.nome.trim().charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
+                      <Avatar nome={conta.nome} cor={conta.cor} />
                       <View style={{ flex: 1 }}>
                         <Text style={e.nomeConta} numberOfLines={1}>
                           {conta.nome}
