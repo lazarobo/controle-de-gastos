@@ -160,12 +160,23 @@ export function Tocavel({
     }).start();
   }
 
+  // O estilo vai no PROPRIO Pressable, nunca num filho. Numa versao anterior o
+  // estilo ficava numa Animated.View interna: com position absolute (o botao +),
+  // o Pressable em volta ficava 0x0 -- o circulo aparecia, mas o toque caia no
+  // vazio. Assim, a area tocavel e sempre exatamente a area desenhada.
   return (
-    <Pressable onPressIn={() => ir(0.97)} onPressOut={() => ir(1)} {...resto}>
-      <Animated.View style={[style, { transform: [{ scale: escala }] }]}>{children}</Animated.View>
-    </Pressable>
+    <PressableAnimado
+      onPressIn={() => ir(0.97)}
+      onPressOut={() => ir(1)}
+      {...resto}
+      style={[style, { transform: [{ scale: escala }] }]}
+    >
+      {children}
+    </PressableAnimado>
   );
 }
+
+const PressableAnimado = Animated.createAnimatedComponent(Pressable);
 
 /** Barra de progresso que preenche ao aparecer e ao mudar de valor. */
 export function BarraProgresso({
