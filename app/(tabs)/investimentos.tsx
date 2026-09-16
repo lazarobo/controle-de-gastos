@@ -10,7 +10,7 @@ import { Cartao, Carregando, Titulo, Vazio } from '../../src/components/ui';
 import { useConsulta } from '../../src/hooks/useConsulta';
 import { useTema } from '../../src/contexto/TemaContexto';
 import * as investimentosRepo from '../../src/repos/investimentos';
-import { formatarMoeda } from '../../src/utils/money';
+import { useMoeda } from '../../src/contexto/PrivacidadeContexto';
 import { formatarData } from '../../src/utils/date';
 import { espaco, raio, type Paleta } from '../../src/utils/tema';
 import type { FatiaGrafico, Investimento } from '../../src/types';
@@ -18,6 +18,7 @@ import type { FatiaGrafico, Investimento } from '../../src/types';
 export default function TelaInvestimentos() {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
+  const formatarMoeda = useMoeda();
   const router = useRouter();
 
   const { dados, carregando } = useConsulta(() => investimentosRepo.listar());

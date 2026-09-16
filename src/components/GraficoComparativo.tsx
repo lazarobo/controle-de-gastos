@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTema } from '../contexto/TemaContexto';
-import { formatarMoeda } from '../utils/money';
+import { useMoeda } from '../contexto/PrivacidadeContexto';
 import { espaco, type Paleta } from '../utils/tema';
 
 export interface LinhaComparativa {
@@ -26,6 +26,7 @@ export interface LinhaComparativa {
 export function GraficoComparativo({ linhas }: { linhas: LinhaComparativa[] }) {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
+  const formatarMoeda = useMoeda();
 
   const maior = Math.max(1, ...linhas.flatMap((l) => [l.receitas, l.despesas]));
 

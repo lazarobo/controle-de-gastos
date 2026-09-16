@@ -1,6 +1,6 @@
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 import { paletaClara, paletaEscura, type Paleta } from '../utils/tema';
-import { formatarMoeda } from '../utils/money';
+import { formatarMoeda, MASCARA_MOEDA } from '../utils/money';
 import type { InstantaneoSaldo } from './instantaneo';
 
 /**
@@ -16,6 +16,8 @@ export function WidgetSaldo({
   cores: Paleta;
 }) {
   const positivo = (instantaneo?.resultado ?? 0) >= 0;
+  const mostrar = (centavos: number) =>
+    instantaneo?.ocultos ? MASCARA_MOEDA : formatarMoeda(centavos);
 
   return (
     <FlexWidget
@@ -39,18 +41,23 @@ export function WidgetSaldo({
       {instantaneo ? (
         <FlexWidget style={{ flexDirection: 'column', width: 'match_parent' }}>
           <TextWidget
-            text={formatarMoeda(instantaneo.saldoTotal)}
+            text={mostrar(instantaneo.saldoTotal)}
             style={{
               fontSize: 26,
-              color: instantaneo.saldoTotal < 0 ? cores.despesa : cores.texto,
+              color:
+                instantaneo.ocultos || instantaneo.saldoTotal >= 0 ? cores.texto : cores.despesa,
               fontWeight: '700',
             }}
           />
           <TextWidget
-            text={`Mês: ${positivo ? '+' : ''}${formatarMoeda(instantaneo.resultado)}`}
+            text={`Mês: ${positivo && !instantaneo.ocultos ? '+' : ''}${mostrar(instantaneo.resultado)}`}
             style={{
               fontSize: 13,
-              color: positivo ? cores.receita : cores.despesa,
+              color: instantaneo.ocultos
+                ? cores.textoFraco
+                : positivo
+                  ? cores.receita
+                  : cores.despesa,
               marginTop: 2,
             }}
           />

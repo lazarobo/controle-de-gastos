@@ -9,7 +9,7 @@ import { SeletorMes } from '../../src/components/SeletorMes';
 import { Carregando, Vazio } from '../../src/components/ui';
 import { useConsulta } from '../../src/hooks/useConsulta';
 import * as lancamentosRepo from '../../src/repos/lancamentos';
-import { formatarMoeda } from '../../src/utils/money';
+import { useMoeda } from '../../src/contexto/PrivacidadeContexto';
 import { formatarDataCurta, mesAtual, type Mes } from '../../src/utils/date';
 import { useTema } from '../../src/contexto/TemaContexto';
 import { espaco, raio, type Paleta } from '../../src/utils/tema';
@@ -23,6 +23,7 @@ interface Dados {
 export default function ListaLancamentos() {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
+  const formatarMoeda = useMoeda();
   const [mes, setMes] = useState<Mes>(mesAtual);
   const router = useRouter();
 

@@ -9,6 +9,7 @@ import { CartaoEvento } from '../../src/components/CartaoEvento';
 import { SeletorMes } from '../../src/components/SeletorMes';
 import { Cartao, Carregando, Titulo, Vazio } from '../../src/components/ui';
 import { useConsulta } from '../../src/hooks/useConsulta';
+import { usePrivacidade } from '../../src/contexto/PrivacidadeContexto';
 import { useTema } from '../../src/contexto/TemaContexto';
 import * as contasRepo from '../../src/repos/contas';
 import * as eventosRepo from '../../src/repos/eventos';
@@ -37,6 +38,7 @@ const ROTULO_TIPO: Record<string, string> = {
 
 export default function Painel() {
   const { cores } = useTema();
+  const { ocultos } = usePrivacidade();
   const e = useMemo(() => criarEstilos(cores), [cores]);
   const [mes, setMes] = useState<Mes>(mesAtual);
   const router = useRouter();
@@ -64,8 +66,8 @@ export default function Painel() {
   // O widget nao consegue abrir o banco: quem o alimenta e esta tela, toda
   // vez que os numeros chegam. Por isso o widget mostra 'atualizado <quando>'.
   useEffect(() => {
-    if (dados) void atualizarWidgetSaldo(dados.saldoTotal, dados.resumo.resultado);
-  }, [dados]);
+    if (dados) void atualizarWidgetSaldo(dados.saldoTotal, dados.resumo.resultado, ocultos);
+  }, [dados, ocultos]);
 
   return (
     <View style={e.tela}>

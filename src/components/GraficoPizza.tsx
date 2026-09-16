@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
-import { formatarMoeda } from '../utils/money';
+import { useMoeda } from '../contexto/PrivacidadeContexto';
 import { useTema } from '../contexto/TemaContexto';
 import { espaco, type Paleta } from '../utils/tema';
 import type { FatiaGrafico } from '../types';
@@ -25,6 +25,7 @@ const CIRCUNFERENCIA = 2 * Math.PI * RAIO;
 export function GraficoPizza({ dados }: { dados: FatiaGrafico[] }) {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
+  const formatarMoeda = useMoeda();
 
   const total = dados.reduce((soma, d) => soma + d.total, 0);
   if (total <= 0) return null;

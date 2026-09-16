@@ -13,7 +13,7 @@ import { useConsulta } from '../../src/hooks/useConsulta';
 import { useTema } from '../../src/contexto/TemaContexto';
 import * as lancamentosRepo from '../../src/repos/lancamentos';
 import * as metasRepo from '../../src/repos/metas';
-import { formatarMoeda } from '../../src/utils/money';
+import { useMoeda } from '../../src/contexto/PrivacidadeContexto';
 import { mesAtual, type Mes } from '../../src/utils/date';
 import { espaco, type Paleta } from '../../src/utils/tema';
 import type {
@@ -215,6 +215,7 @@ function BarraMeta({ meta }: { meta: MetaComProgresso }) {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
 
+  const formatarMoeda = useMoeda();
   const fracao = meta.meta > 0 ? meta.gasto / meta.meta : 0;
   const estourou = meta.gasto > meta.meta;
 

@@ -11,12 +11,17 @@ import { gravarInstantaneo, type InstantaneoSaldo } from './instantaneo';
  *
  * Nunca lanca: widget e enfeite, nao pode derrubar a tela principal.
  */
-export async function atualizarWidgetSaldo(saldoTotal: number, resultado: number): Promise<void> {
+export async function atualizarWidgetSaldo(
+  saldoTotal: number,
+  resultado: number,
+  ocultos: boolean,
+): Promise<void> {
   if (Platform.OS !== 'android') return;
 
   const dados: InstantaneoSaldo = {
     saldoTotal,
     resultado,
+    ocultos,
     atualizadoEm: new Date().toISOString(),
   };
 

@@ -11,7 +11,8 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useMovimentoReduzido } from '../hooks/useMovimentoReduzido';
-import { formatarMoeda } from '../utils/money';
+import { usePrivacidade } from '../contexto/PrivacidadeContexto';
+import { formatarMoeda, MASCARA_MOEDA } from '../utils/money';
 
 /**
  * Animacoes do app, todas com a API Animated nativa do React Native.
@@ -92,6 +93,7 @@ export function NumeroAnimado({
   comSinal?: boolean;
 }) {
   const reduzido = useMovimentoReduzido();
+  const { ocultos } = usePrivacidade();
   const [exibido, setExibido] = useState(0);
   const anterior = useRef(0);
 
@@ -129,6 +131,10 @@ export function NumeroAnimado({
       t.removeListener(ouvinte);
     };
   }, [centavos, reduzido]);
+
+  // Escondido: nem sinal nem contagem. Ver "+" subindo ate a mascara ja
+  // entregaria se o mes fechou no azul.
+  if (ocultos) return <Text style={style}>{MASCARA_MOEDA}</Text>;
 
   return (
     <Text style={style}>

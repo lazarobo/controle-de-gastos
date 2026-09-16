@@ -15,7 +15,13 @@ import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
 
 import { MIGRATIONS, VERSAO_ALVO } from '../src/db/migrations.ts';
-import { formatarMoeda, formatarValor, parseMoeda } from '../src/utils/money.ts';
+import {
+  formatarMoeda,
+  formatarMoedaOculta,
+  formatarValor,
+  MASCARA_MOEDA,
+  parseMoeda,
+} from '../src/utils/money.ts';
 import {
   proximosLembretesBackup,
   proximosLembretesDiarios,
@@ -87,6 +93,18 @@ teste('centavos inteiros nao acumulam erro de ponto flutuante', () => {
 teste('formatarMoeda usa pt-BR', () => {
   const texto = formatarMoeda(123456);
   assert.match(texto, /1\.234,56/);
+});
+
+teste('olhinho fechado esconde o valor; aberto mostra igual a antes', () => {
+  assert.equal(formatarMoedaOculta(123456, false), formatarMoeda(123456));
+  assert.equal(formatarMoedaOculta(123456, true), MASCARA_MOEDA);
+});
+
+teste('mascara nao deixa escapar a ordem de grandeza', () => {
+  // Mascara de largura fixa: R$ 12,00 e R$ 1.200.000,00 tem de ficar iguais,
+  // senao da para adivinhar o tamanho do numero so de olhar.
+  assert.equal(formatarMoedaOculta(1200, true), formatarMoedaOculta(120000000, true));
+  assert.ok(!/[0-9]/.test(MASCARA_MOEDA), 'a mascara nao pode conter digito');
 });
 
 // ---------------------------------------------------------------- datas

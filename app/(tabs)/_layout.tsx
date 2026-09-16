@@ -1,5 +1,6 @@
-import { Pressable, Text, type ColorValue } from 'react-native';
+import { Pressable, Text, View, type ColorValue } from 'react-native';
 import { Tabs } from 'expo-router';
+import { usePrivacidade } from '../../src/contexto/PrivacidadeContexto';
 import { useTema } from '../../src/contexto/TemaContexto';
 import { espaco } from '../../src/utils/tema';
 
@@ -27,6 +28,26 @@ function BotaoTema() {
   );
 }
 
+/**
+ * O "olhinho" dos apps de banco: esconde todo valor da tela de uma vez.
+ * Fica ao lado do sol/lua porque as duas sao decisoes sobre ONDE voce esta
+ * usando o app agora -- no escuro, ou perto de gente.
+ */
+function BotaoOlho() {
+  const { cores } = useTema();
+  const { ocultos, alternar } = usePrivacidade();
+  return (
+    <Pressable
+      onPress={alternar}
+      hitSlop={12}
+      style={{ paddingHorizontal: espaco.sm }}
+      accessibilityLabel={ocultos ? 'Mostrar valores' : 'Esconder valores'}
+    >
+      <Text style={{ fontSize: 19, color: cores.texto }}>{ocultos ? '⊘' : '◉'}</Text>
+    </Pressable>
+  );
+}
+
 export default function LayoutAbas() {
   const { cores } = useTema();
   return (
@@ -42,7 +63,12 @@ export default function LayoutAbas() {
         // Troca de aba desliza em vez de piscar: o jeito mais barato de o app
         // inteiro parecer menos estatico, sem tocar em nenhuma tela.
         animation: 'shift',
-        headerRight: () => <BotaoTema />,
+        headerRight: () => (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <BotaoOlho />
+            <BotaoTema />
+          </View>
+        ),
       }}
     >
       <Tabs.Screen

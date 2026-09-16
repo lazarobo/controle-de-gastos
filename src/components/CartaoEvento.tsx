@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { BarraProgresso, Tocavel } from './animacao';
 import { useTema } from '../contexto/TemaContexto';
-import { formatarMoeda } from '../utils/money';
+import { useMoeda } from '../contexto/PrivacidadeContexto';
 import { formatarData } from '../utils/date';
 import { espaco, raio, type Paleta } from '../utils/tema';
 import type { EventoResumo } from '../types';
@@ -17,6 +17,7 @@ export function CartaoEvento({
 }) {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
+  const formatarMoeda = useMoeda();
   const { conta, entrou, gasto, saldo } = evento;
   const estourou = saldo < 0;
   const periodo = formatarPeriodo(conta.data_inicio, conta.data_fim);
