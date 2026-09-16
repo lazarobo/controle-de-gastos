@@ -263,3 +263,16 @@ export async function totaisPorDia(mes: Mes): Promise<TotalPorDia[]> {
   }
   return resultado;
 }
+
+/**
+ * Quantos lancamentos existem numa data. Usado pelo lembrete diario para
+ * pular o dia em que voce ja registrou alguma coisa.
+ */
+export async function contarNoDia(data: string): Promise<number> {
+  const db = await obterDb();
+  const r = await db.getFirstAsync<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM lancamentos WHERE data = ?`,
+    data,
+  );
+  return r?.total ?? 0;
+}

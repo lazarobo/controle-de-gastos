@@ -110,6 +110,25 @@ export function mascararData(texto: string): string {
  * 'DD/MM/AAAA' -> 'YYYY-MM-DD'. Retorna null para datas inexistentes como 31/02,
  * que o construtor Date aceitaria silenciosamente virando 03/03.
  */
+/** 'HHMM' -> 'HH:MM' enquanto o usuario digita. */
+export function mascararHora(texto: string): string {
+  const d = texto.replace(/\D/g, '').slice(0, 4);
+  if (d.length <= 2) return d;
+  return `${d.slice(0, 2)}:${d.slice(2)}`;
+}
+
+/** 'HH:MM' -> { hora, minuto }. null para horario que nao existe (25:00, 10:75). */
+export function lerHora(texto: string): { hora: number; minuto: number } | null {
+  const m = texto.match(/^(\d{2}):(\d{2})$/);
+  if (!m) return null;
+
+  const hora = Number(m[1]);
+  const minuto = Number(m[2]);
+  if (hora > 23 || minuto > 59) return null;
+
+  return { hora, minuto };
+}
+
 export function textoParaISO(texto: string): string | null {
   const m = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!m) return null;

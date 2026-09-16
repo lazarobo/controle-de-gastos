@@ -17,11 +17,17 @@ import assert from 'node:assert/strict';
 import { MIGRATIONS, VERSAO_ALVO } from '../src/db/migrations.ts';
 import { formatarMoeda, formatarValor, parseMoeda } from '../src/utils/money.ts';
 import {
+  proximosLembretesBackup,
+  proximosLembretesDiarios,
+} from '../src/utils/lembretes.ts';
+import {
   dataParaISO,
   formatarData,
   intervaloDoMes,
   isoParaData,
+  lerHora,
   mascararData,
+  mascararHora,
   somarMeses,
   textoParaISO,
 } from '../src/utils/date.ts';
@@ -167,6 +173,87 @@ function aplicarMigration(b: DatabaseSync, m: (typeof MIGRATIONS)[number]) {
     b.exec('PRAGMA foreign_keys = ON');
   }
 }
+
+
+console.log('\nlembretes');
+
+teste('lerHora recusa horario que nao existe no relogio', () => {
+  assert.deepEqual(lerHora('20:00'), { hora: 20, minuto: 0 });
+  assert.deepEqual(lerHora('00:00'), { hora: 0, minuto: 0 });
+  assert.equal(lerHora('24:00'), null);
+  assert.equal(lerHora('10:75'), null);
+  assert.equal(lerHora('8:30'), null);
+});
+
+teste('mascararHora insere os dois pontos', () => {
+  assert.equal(mascararHora('20'), '20');
+  assert.equal(mascararHora('2030'), '20:30');
+  assert.equal(mascararHora('20:30'), '20:30');
+  assert.equal(mascararHora('20309999'), '20:30');
+});
+
+teste('lembrete diario pula hoje quando voce JA lancou', () => {
+  // 16/09 as 18h, lembrete as 20h: ainda daria para tocar hoje...
+  const agora = new Date(2026, 8, 16, 18, 0);
+  const datas = proximosLembretesDiarios(agora, { hora: 20, minuto: 0 }, true, 3);
+  assert.equal(datas[0].getDate(), 17, '...mas ja lancou, entao comeca amanha');
+  assert.equal(datas[0].getHours(), 20);
+});
+
+teste('lembrete diario toca hoje se ainda nao lancou e a hora nao passou', () => {
+  const agora = new Date(2026, 8, 16, 18, 0);
+  const datas = proximosLembretesDiarios(agora, { hora: 20, minuto: 0 }, false, 3);
+  assert.equal(datas[0].getDate(), 16);
+});
+
+teste('lembrete diario nao agenda no passado', () => {
+  // 22h, lembrete de 20h ja passou: nao adianta agendar para tras.
+  const agora = new Date(2026, 8, 16, 22, 0);
+  const datas = proximosLembretesDiarios(agora, { hora: 20, minuto: 0 }, false, 3);
+  assert.equal(datas[0].getDate(), 17);
+  assert.ok(datas.every((d) => d.getTime() > agora.getTime()));
+});
+
+teste('lembrete diario devolve dias consecutivos, cobrindo quem sumiu', () => {
+  const agora = new Date(2026, 8, 16, 18, 0);
+  const datas = proximosLembretesDiarios(agora, { hora: 21, minuto: 30 }, false, 7);
+  assert.equal(datas.length, 7);
+  for (let i = 1; i < datas.length; i++) {
+    const diff = datas[i].getTime() - datas[i - 1].getTime();
+    assert.equal(diff, 24 * 60 * 60 * 1000, 'as datas tem de ser dias seguidos');
+  }
+  assert.equal(datas[0].getHours(), 21);
+  assert.equal(datas[0].getMinutes(), 30);
+});
+
+teste('lembrete diario atravessa a virada do mes', () => {
+  const agora = new Date(2026, 8, 30, 22, 0);
+  const datas = proximosLembretesDiarios(agora, { hora: 20, minuto: 0 }, false, 2);
+  assert.equal(datas[0].getDate(), 1);
+  assert.equal(datas[0].getMonth(), 9, 'outubro');
+});
+
+teste('lembrete de backup conta a partir do ultimo backup, nao de hoje', () => {
+  const agora = new Date(2026, 8, 16, 12, 0);
+  const datas = proximosLembretesBackup(agora, isoParaData('2026-09-10'), { hora: 20, minuto: 0 }, 2);
+  // 10/09 + 30 dias = 10/10
+  assert.equal(datas[0].getDate(), 10);
+  assert.equal(datas[0].getMonth(), 9);
+});
+
+teste('backup vencido ha muito tempo cobra amanha, nao no passado', () => {
+  const agora = new Date(2026, 8, 16, 12, 0);
+  const datas = proximosLembretesBackup(agora, isoParaData('2026-01-01'), { hora: 20, minuto: 0 }, 1);
+  assert.ok(datas[0].getTime() > agora.getTime());
+  assert.equal(datas[0].getDate(), 17);
+});
+
+teste('sem backup nenhum, cobra em 30 dias', () => {
+  const agora = new Date(2026, 8, 16, 12, 0);
+  const datas = proximosLembretesBackup(agora, null, { hora: 20, minuto: 0 }, 1);
+  assert.equal(datas[0].getMonth(), 9);
+  assert.equal(datas[0].getDate(), 16);
+});
 
 // ---------------------------------------------------------------- banco
 

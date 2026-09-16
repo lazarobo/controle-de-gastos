@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { obterDb } from '../src/db';
+import { sincronizarLembretes } from '../src/servicos/notificacoes';
 import { TemaProvider, useTema } from '../src/contexto/TemaContexto';
 import { espaco, type Paleta } from '../src/utils/tema';
 
@@ -35,7 +36,13 @@ function ConteudoRaiz() {
 
   useEffect(() => {
     obterDb()
-      .then(() => setPronto(true))
+      .then(() => {
+        setPronto(true);
+        // Reagenda a cada abertura: e isso que faz o lembrete diario pular o
+        // dia em que voce ja lancou, sem precisar de tarefa em segundo plano.
+        // Nao e aguardado -- a tela nao espera notificacao para aparecer.
+        void sincronizarLembretes();
+      })
       .catch((err: unknown) => setErro(err instanceof Error ? err.message : String(err)));
   }, []);
 

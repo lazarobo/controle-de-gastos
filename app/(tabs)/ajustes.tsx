@@ -1,15 +1,18 @@
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { Tocavel } from '../../src/components/animacao';
 import { Avatar } from '../../src/components/Avatar';
-import { Botao, Cartao, Chips, Rotulo, Titulo } from '../../src/components/ui';
+import { Botao, Campo, Cartao, Chips, Rotulo, Titulo } from '../../src/components/ui';
 import * as backup from '../../src/repos/backup';
+import * as preferenciasRepo from '../../src/repos/preferencias';
+import * as notificacoes from '../../src/servicos/notificacoes';
 import { NOME_BANCO } from '../../src/db';
 import { VERSAO_ALVO } from '../../src/db/migrations';
 import { useTema, type ModoTema } from '../../src/contexto/TemaContexto';
-import { espaco, raio, type Paleta } from '../../src/utils/tema';
+import { formatarData, lerHora, mascararHora } from '../../src/utils/date';
+import { espaco, type Paleta } from '../../src/utils/tema';
 
 const OPCOES_TEMA: { valor: ModoTema; rotulo: string }[] = [
   { valor: 'claro', rotulo: 'Claro' },
@@ -24,10 +27,71 @@ export default function Ajustes() {
   const [exportando, setExportando] = useState(false);
   const [importando, setImportando] = useState(false);
 
+  const [diarioAtivo, setDiarioAtivo] = useState(false);
+  const [horaTexto, setHoraTexto] = useState(notificacoes.HORA_PADRAO);
+  const [backupAtivo, setBackupAtivo] = useState(false);
+  const [ultimoBackup, setUltimoBackup] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const [diario, hora, lembreteBackup, ultimo] = await Promise.all([
+        preferenciasRepo.obter(notificacoes.CHAVE_DIARIO_ATIVO),
+        preferenciasRepo.obter(notificacoes.CHAVE_DIARIO_HORA),
+        preferenciasRepo.obter(notificacoes.CHAVE_BACKUP_ATIVO),
+        preferenciasRepo.obter(notificacoes.CHAVE_ULTIMO_BACKUP),
+      ]);
+      if (!vivo) return;
+      setDiarioAtivo(diario === '1');
+      setHoraTexto(hora ?? notificacoes.HORA_PADRAO);
+      setBackupAtivo(lembreteBackup === '1');
+      setUltimoBackup(ultimo);
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  /** Salva a preferencia e reagenda tudo -- as duas coisas sempre juntas. */
+  async function definirPreferencia(chave: string, valor: string) {
+    await preferenciasRepo.definir(chave, valor);
+    await notificacoes.sincronizarLembretes();
+  }
+
+  async function alternarLembrete(chave: string, ligar: boolean, aplicar: (v: boolean) => void) {
+    if (ligar) {
+      // Permissao so e pedida quando voce liga o lembrete, nunca ao abrir o app.
+      const permitido = await notificacoes.garantirPermissao();
+      if (!permitido) {
+        Alert.alert(
+          'Notificações bloqueadas',
+          'O Android não está deixando o app avisar você. Libere em Configurações › Apps › ' +
+            'Controle de Gastos › Notificações.',
+        );
+        return;
+      }
+    }
+    aplicar(ligar);
+    await definirPreferencia(chave, ligar ? '1' : '0');
+  }
+
+  async function mudarHora(texto: string) {
+    const mascarado = mascararHora(texto);
+    setHoraTexto(mascarado);
+    // Só reagenda quando o horário existe de verdade; "2:" no meio da digitação não conta.
+    if (lerHora(mascarado)) {
+      await definirPreferencia(notificacoes.CHAVE_DIARIO_HORA, mascarado);
+    }
+  }
+
   async function exportar() {
     setExportando(true);
     try {
       const r = await backup.exportar();
+      // Reinicia a contagem do lembrete de backup a partir de hoje.
+      await notificacoes.registrarBackupFeito();
+      await notificacoes.sincronizarLembretes();
+      setUltimoBackup(await preferenciasRepo.obter(notificacoes.CHAVE_ULTIMO_BACKUP));
       Alert.alert(
         'Backup gerado',
         `${r.nomeArquivo}\n${r.totalLancamentos} lançamento(s).\n\n` +
@@ -69,6 +133,8 @@ export default function Ajustes() {
     }
   }
 
+  const horaValida = lerHora(horaTexto) != null;
+
   return (
     <ScrollView style={e.tela} contentContainerStyle={e.conteudo}>
       <Cartao>
@@ -101,6 +167,61 @@ export default function Ajustes() {
           cor="#8E24AA"
           onPress={() => router.push('/eventos')}
         />
+      </Cartao>
+
+      <Cartao>
+        <Titulo>Lembretes</Titulo>
+
+        <View style={e.linhaSwitch}>
+          <View style={{ flex: 1 }}>
+            <Rotulo>Lembrete diário</Rotulo>
+            <Text style={e.ajudaCurta}>
+              Só avisa nos dias em que você não lançou nada.
+            </Text>
+          </View>
+          <Switch
+            value={diarioAtivo}
+            onValueChange={(v) =>
+              alternarLembrete(notificacoes.CHAVE_DIARIO_ATIVO, v, setDiarioAtivo)
+            }
+          />
+        </View>
+
+        {diarioAtivo ? (
+          <View style={e.campoHora}>
+            <Campo
+              rotulo="Horário"
+              value={horaTexto}
+              onChangeText={mudarHora}
+              keyboardType="number-pad"
+              placeholder="20:00"
+              maxLength={5}
+              erro={horaValida ? null : 'Horário inválido — use HH:MM.'}
+            />
+          </View>
+        ) : null}
+
+        <View style={[e.linhaSwitch, e.comSeparador]}>
+          <View style={{ flex: 1 }}>
+            <Rotulo>Lembrete de backup</Rotulo>
+            <Text style={e.ajudaCurta}>
+              A cada 30 dias sem exportar. Último:{' '}
+              {ultimoBackup ? formatarData(ultimoBackup) : 'nunca'}.
+            </Text>
+          </View>
+          <Switch
+            value={backupAtivo}
+            onValueChange={(v) =>
+              alternarLembrete(notificacoes.CHAVE_BACKUP_ATIVO, v, setBackupAtivo)
+            }
+          />
+        </View>
+
+        <Text style={e.ajuda}>
+          Os lembretes são agendados no próprio aparelho — nada sai daqui. Se o Android
+          estiver economizando bateria com o app, ele pode atrasar ou engolir o aviso;
+          nesse caso, marque o app como "sem restrição" nas configurações de bateria.
+        </Text>
       </Cartao>
 
       <Cartao>
@@ -187,8 +308,17 @@ function criarEstilos(cores: Paleta) {
     itemRotulo: { fontSize: 15, fontWeight: '600', color: cores.texto },
     itemDetalhe: { fontSize: 12, color: cores.textoFraco, marginTop: 2 },
     seta: { fontSize: 24, color: cores.textoFraco },
+    linhaSwitch: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: espaco.md,
+      paddingVertical: espaco.sm,
+    },
+    comSeparador: { borderTopWidth: 1, borderTopColor: cores.borda, marginTop: espaco.sm },
+    campoHora: { maxWidth: 160, marginTop: espaco.sm },
+    ajudaCurta: { fontSize: 12, color: cores.textoFraco, marginTop: 2 },
     aviso: { fontSize: 13, color: cores.textoFraco, marginBottom: espaco.md },
-    ajuda: { fontSize: 12, color: cores.textoFraco, marginTop: espaco.sm },
+    ajuda: { fontSize: 12, color: cores.textoFraco, marginTop: espaco.sm, lineHeight: 17 },
     acoes: { gap: espaco.sm },
     meta: { fontSize: 12, color: cores.textoFraco, marginTop: 2 },
   });
