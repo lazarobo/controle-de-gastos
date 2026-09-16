@@ -105,6 +105,7 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 | **D17** | **Animações** | API `Animated` nativa do React Native, sem Reanimated: ele está no `node_modules` por causa dos `overrides`, mas exige plugin de Babel e já custou dois builds quebrados no SDK 57. Opacidade e transform rodam na thread nativa. Tudo respeita "Remover animações" do Android (`useMovimentoReduzido`). Entrada anima só na montagem da tela, não a cada recarga de dados; números animam do valor anterior ao novo, como feedback de que o lançamento entrou. |
 | **D18** | **Lembretes** | Notificação **local** agendada no aparelho: sem servidor, sem FCM, o "100% offline" (RNF01) continua valendo. Não é um alarme "repete todo dia" — o app agenda os próximos 7 dias avulsos e **reagenda a cada abertura**, pulando o dia em que já houve lançamento. Assim o lembrete some para quem usa o app e insiste para quem sumiu, sem tarefa em segundo plano. A regra de quando tocar vive em `src/utils/lembretes.ts`, sem dependência nativa, e é testada pelo `verify`. Permissão é pedida ao **ligar** o lembrete, nunca na abertura. |
 | **D19** | **Widgets** | Widget do Android não roda React Native nem enxerga o SQLite. O app grava um instantâneo (`widget-saldo.json`) com saldo e resultado, e o widget só lê — mostrando "atualizado <quando>" para o número velho nunca se passar por atual. Não é segunda fonte de verdade: nada é calculado a partir dele. O widget de atalho não carrega dado nenhum de propósito, então nunca desatualiza. A entrada do app virou `index.js` porque o tratador precisa ser registrado fora do React — o Android chama esse código com o app fechado. |
+| **D20** | **Olhinho (esconder valores)** | O estado fica guardado: esconder é uma decisão sobre o ambiente onde você usa o app, não sobre a sessão. A máscara é de largura fixa (`R$ ••••`) para R$ 12,00 e R$ 1.200.000,00 ficarem idênticos — máscara proporcional ao número entregaria a ordem de grandeza. Escondido, some também o sinal e a cor verde/vermelha, que sozinhos já diriam se o mês fechou no azul. O **widget** respeita o mesmo estado: ele vive na tela inicial do celular, a superfície mais pública que existe. Campo de formulário nunca é mascarado — esconder o valor que a pessoa está digitando não protege nada e impede conferir antes de salvar. |
 
 ---
 
@@ -132,6 +133,7 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 - [x] **RF21** — Comparativos receita × despesa: total do mês e por conta
 - [x] **RF22** — Eventos (D16): criar com reserva inicial, registrar gasto e separar mais a partir do evento, encerrar e devolver a sobra
 - [x] **RF24** — Lembrete diário de lançamento (pula o dia em que você já lançou) e lembrete de backup a cada 30 dias sem exportar (D18)
+- [x] **RF26** — Esconder valores com um toque (olhinho), incluindo no widget (D20)
 - [x] **RF25** — Widgets Android: atalho para registrar gasto/receita e widget de saldo com instantâneo (D19)
 - [x] **RF23** — Redesign do Início (degradê no saldo, cores das contas, cartão de investimentos, eventos ativos) e animações leves em todo o app (D17)
 

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTema } from '../contexto/TemaContexto';
 import { formatarMesAbreviado } from '../utils/date';
-import { formatarMoeda } from '../utils/money';
+import { useMoeda } from '../contexto/PrivacidadeContexto';
 import { espaco, type Paleta } from '../utils/tema';
 import type { EvolucaoMes } from '../types';
 
@@ -19,6 +19,7 @@ const LARGURA_BARRA = 10;
 export function GraficoBarras({ dados }: { dados: EvolucaoMes[] }) {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
+  const formatarMoeda = useMoeda();
 
   const maior = Math.max(1, ...dados.flatMap((d) => [d.receitas, d.despesas]));
 

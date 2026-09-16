@@ -11,7 +11,7 @@ import { useConsulta } from '../../src/hooks/useConsulta';
 import { useTema } from '../../src/contexto/TemaContexto';
 import * as contasRepo from '../../src/repos/contas';
 import * as eventosRepo from '../../src/repos/eventos';
-import { formatarMoeda } from '../../src/utils/money';
+import { useMoeda } from '../../src/contexto/PrivacidadeContexto';
 import { formatarData, hojeISO, mascararData, textoParaISO } from '../../src/utils/date';
 import { espaco, PALETA, type Paleta } from '../../src/utils/tema';
 import type { Conta } from '../../src/types';
@@ -19,6 +19,7 @@ import type { Conta } from '../../src/types';
 export default function FormularioEvento() {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
+  const formatarMoeda = useMoeda();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const novo = id === 'novo';

@@ -17,6 +17,20 @@ export function formatarMoeda(centavos: number): string {
   return formatador.format(centavos / 100);
 }
 
+/** O que aparece no lugar do valor quando o "olhinho" esta fechado. */
+export const MASCARA_MOEDA = 'R$ ••••';
+
+/**
+ * Dinheiro para EXIBICAO, respeitando o olhinho.
+ *
+ * So para mostrar na tela. Campo de formulario continua usando formatarValor:
+ * esconder o valor que a pessoa esta editando nao protege nada e impede o
+ * conferir antes de salvar.
+ */
+export function formatarMoedaOculta(centavos: number, ocultos: boolean): string {
+  return ocultos ? MASCARA_MOEDA : formatarMoeda(centavos);
+}
+
 /** 123456 -> "1.234,56" (sem simbolo, para inputs) */
 export function formatarValor(centavos: number): string {
   return (centavos / 100).toFixed(2).replace('.', ',');

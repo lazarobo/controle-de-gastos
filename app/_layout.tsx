@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { obterDb } from '../src/db';
 import { sincronizarLembretes } from '../src/servicos/notificacoes';
+import { PrivacidadeProvider } from '../src/contexto/PrivacidadeContexto';
 import { TemaProvider, useTema } from '../src/contexto/TemaContexto';
 import { espaco, type Paleta } from '../src/utils/tema';
 
@@ -22,7 +23,9 @@ import { espaco, type Paleta } from '../src/utils/tema';
 export default function LayoutRaiz() {
   return (
     <TemaProvider>
-      <ConteudoRaiz />
+      <PrivacidadeProvider>
+        <ConteudoRaiz />
+      </PrivacidadeProvider>
     </TemaProvider>
   );
 }

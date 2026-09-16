@@ -15,6 +15,12 @@ export interface InstantaneoSaldo {
   saldoTotal: number;
   /** Centavos, resultado do mes corrente. */
   resultado: number;
+  /**
+   * Olhinho fechado no app. O widget fica na tela inicial do celular -- a
+   * superficie mais publica que existe -- entao esconder no app e deixar
+   * exposto aqui seria meia protecao.
+   */
+  ocultos?: boolean;
   /** ISO de quando o app gravou. */
   atualizadoEm: string;
 }

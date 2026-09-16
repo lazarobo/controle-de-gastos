@@ -9,7 +9,7 @@ import { Carregando, Vazio } from '../src/components/ui';
 import { useConsulta } from '../src/hooks/useConsulta';
 import { useTema } from '../src/contexto/TemaContexto';
 import * as contasRepo from '../src/repos/contas';
-import { formatarMoeda } from '../src/utils/money';
+import { useMoeda } from '../src/contexto/PrivacidadeContexto';
 import { espaco, raio, type Paleta } from '../src/utils/tema';
 import { TIPOS_CONTA } from '../src/types';
 
@@ -21,6 +21,7 @@ const COR_PADRAO = '#546E7A';
 export default function ListaContas() {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
+  const formatarMoeda = useMoeda();
   const router = useRouter();
   // Inclui inativas: esta e a unica tela onde elas podem ser reativadas.
   const { dados, carregando } = useConsulta(() => contasRepo.saldos(true));
