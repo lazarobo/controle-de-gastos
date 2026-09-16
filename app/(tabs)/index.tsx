@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -14,6 +14,7 @@ import * as contasRepo from '../../src/repos/contas';
 import * as eventosRepo from '../../src/repos/eventos';
 import * as investimentosRepo from '../../src/repos/investimentos';
 import * as lancamentosRepo from '../../src/repos/lancamentos';
+import { atualizarWidgetSaldo } from '../../src/widgets/atualizar';
 import { mesAtual, type Mes } from '../../src/utils/date';
 import { espaco, raio, type Paleta } from '../../src/utils/tema';
 import type { EventoResumo, ResumoMes, SaldoConta } from '../../src/types';
@@ -59,6 +60,12 @@ export default function Painel() {
       posicoes: investimentos.length,
     };
   }, [mes.ano, mes.mes]);
+
+  // O widget nao consegue abrir o banco: quem o alimenta e esta tela, toda
+  // vez que os numeros chegam. Por isso o widget mostra 'atualizado <quando>'.
+  useEffect(() => {
+    if (dados) void atualizarWidgetSaldo(dados.saldoTotal, dados.resumo.resultado);
+  }, [dados]);
 
   return (
     <View style={e.tela}>

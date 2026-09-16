@@ -2,7 +2,7 @@
   "expo": {
     "name": "Controle de Gastos",
     "slug": "controle-de-gastos",
-    "version": "1.2.2",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -26,7 +26,36 @@
       "expo-router",
       "expo-status-bar",
       "expo-sqlite",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-notifications",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "Atalho",
+              "label": "Controle de Gastos — atalhos",
+              "description": "Registrar gasto ou receita em um toque",
+              "minWidth": "180dp",
+              "minHeight": "48dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "resizeMode": "horizontal"
+            },
+            {
+              "name": "Saldo",
+              "label": "Controle de Gastos — saldo",
+              "description": "Saldo total e resultado do mês",
+              "minWidth": "180dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "scheme": "controledegastos",
     "extra": {

@@ -1,11 +1,43 @@
-export type Paleta = typeof paletaClara;
+/**
+ * Cor em hexadecimal. O tipo nao e `string` solto de proposito: os widgets do
+ * Android so aceitam hexadecimal, e sem isso um inocente `'red'` compilaria
+ * aqui e sumiria la, sem erro nenhum.
+ */
+export type Cor = `#${string}`;
 
 /**
  * Duas paletas com as MESMAS chaves — todo componente le `cores.texto`,
  * `cores.superficie` etc. sem saber qual das duas esta ativa. Quem decide isso
  * e o TemaContexto (src/contexto/TemaContexto.tsx); nada aqui e reativo.
+ *
+ * A interface e escrita a mao (em vez de `typeof paletaClara`) para as duas
+ * paletas serem obrigadas a ter as mesmas chaves E cores hexadecimais.
  */
-export const paletaClara = {
+export interface Paleta {
+  fundo: Cor;
+  superficie: Cor;
+  superficieAlt: Cor;
+  borda: Cor;
+  texto: Cor;
+  textoFraco: Cor;
+  primaria: Cor;
+  primariaFraca: Cor;
+  receita: Cor;
+  despesa: Cor;
+  /** Movimentacao interna: nem ganho nem gasto, entao nem verde nem vermelho. */
+  transferencia: Cor;
+  perigo: Cor;
+  neutra: Cor;
+  /** Degrade do cartao de saldo no Inicio (topo-esquerda -> base-direita). */
+  gradienteA: Cor;
+  gradienteB: Cor;
+  /** Texto sobre o degrade: branco nos dois temas, o fundo e sempre escuro. */
+  sobreDestaque: Cor;
+  /** Acento de investimentos: roxo, distinto de receita/despesa/primaria. */
+  investimento: Cor;
+}
+
+export const paletaClara: Paleta = {
   fundo: '#F4F6F8',
   superficie: '#FFFFFF',
   superficieAlt: '#F0F2F5',

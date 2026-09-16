@@ -103,6 +103,8 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 | **D15** | **Cor em conta e investimento** | Toda entidade que aparece em gráfico tem cor própria escolhida pelo usuário (migrations 6 e 7). Paleta subiu de 12 para 24 tons, organizada por matiz. Alternativa descartada: gerar cor automática por hash do nome — dá cores repetidas e feias em listas pequenas, e o usuário não consegue corrigir. |
 | **D16** | **Eventos** | Evento (viagem, show) é uma **conta** com `tipo = 'evento'`: separar dinheiro é uma movimentação interna para ela, e os gastos saem dela. Escolha do usuário, contra a alternativa de "envelope" (gasto na conta real, marcado com o evento). Trade-off aceito e registrado: o saldo da conta de origem só bate com o extrato do banco se o dinheiro for de fato movido para uma conta/caixinha separada. Evento conta no saldo total (é dinheiro do usuário até ser gasto), mas tem seção própria no Início e some das listas de contas. |
 | **D17** | **Animações** | API `Animated` nativa do React Native, sem Reanimated: ele está no `node_modules` por causa dos `overrides`, mas exige plugin de Babel e já custou dois builds quebrados no SDK 57. Opacidade e transform rodam na thread nativa. Tudo respeita "Remover animações" do Android (`useMovimentoReduzido`). Entrada anima só na montagem da tela, não a cada recarga de dados; números animam do valor anterior ao novo, como feedback de que o lançamento entrou. |
+| **D18** | **Lembretes** | Notificação **local** agendada no aparelho: sem servidor, sem FCM, o "100% offline" (RNF01) continua valendo. Não é um alarme "repete todo dia" — o app agenda os próximos 7 dias avulsos e **reagenda a cada abertura**, pulando o dia em que já houve lançamento. Assim o lembrete some para quem usa o app e insiste para quem sumiu, sem tarefa em segundo plano. A regra de quando tocar vive em `src/utils/lembretes.ts`, sem dependência nativa, e é testada pelo `verify`. Permissão é pedida ao **ligar** o lembrete, nunca na abertura. |
+| **D19** | **Widgets** | Widget do Android não roda React Native nem enxerga o SQLite. O app grava um instantâneo (`widget-saldo.json`) com saldo e resultado, e o widget só lê — mostrando "atualizado <quando>" para o número velho nunca se passar por atual. Não é segunda fonte de verdade: nada é calculado a partir dele. O widget de atalho não carrega dado nenhum de propósito, então nunca desatualiza. A entrada do app virou `index.js` porque o tratador precisa ser registrado fora do React — o Android chama esse código com o app fechado. |
 
 ---
 
@@ -129,6 +131,8 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 - [x] **RF20** — Aba própria de Investimentos com KPIs (total, nº de posições, concentração da maior) e rosca de distribuição por banco
 - [x] **RF21** — Comparativos receita × despesa: total do mês e por conta
 - [x] **RF22** — Eventos (D16): criar com reserva inicial, registrar gasto e separar mais a partir do evento, encerrar e devolver a sobra
+- [x] **RF24** — Lembrete diário de lançamento (pula o dia em que você já lançou) e lembrete de backup a cada 30 dias sem exportar (D18)
+- [x] **RF25** — Widgets Android: atalho para registrar gasto/receita e widget de saldo com instantâneo (D19)
 - [x] **RF23** — Redesign do Início (degradê no saldo, cores das contas, cartão de investimentos, eventos ativos) e animações leves em todo o app (D17)
 
 ### v2 — evolução (congelado até a Fase 7)
