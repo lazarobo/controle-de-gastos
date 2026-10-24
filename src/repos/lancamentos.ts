@@ -1,4 +1,5 @@
 import { obterDb } from '../db';
+import { calcularParcelas, somarMesesISO } from '../utils/cartao';
 import { chaveMes, dataParaISO, intervaloDoMes, somarMeses, type Mes } from '../utils/date';
 import type {
   EvolucaoMes,
@@ -19,6 +20,8 @@ export interface DadosLancamento {
   tipo: TipoLancamento;
   /** 'YYYY-MM-DD'. */
   data: string;
+  /** 'HH:MM' local, ou null quando o usuario apagou a hora. */
+  hora: string | null;
   /** Na transferencia, a conta de ORIGEM. */
   conta_id: number;
   /** Obrigatorio em transferencia, null nos demais (CHECK no banco garante). */
@@ -28,28 +31,57 @@ export interface DadosLancamento {
   observacao: string | null;
 }
 
+/**
+ * Lancamentos em conta de investimento sao ajustes de valor (rendimento ou
+ * queda), nao ganho nem gasto do mes -- toda consulta de KPI os descarta com
+ * este filtro. Sem ele, um mes bom na bolsa apareceria como "receita".
+ */
+const FORA_INVESTIMENTO = `conta_id NOT IN (SELECT id FROM contas WHERE tipo = 'investimento')`;
+
 const SELECT_DETALHADO = `
   SELECT l.*,
          c.nome   AS conta_nome,
+         c.tipo   AS conta_tipo,
          cd.nome  AS conta_destino_nome,
+         cd.tipo  AS conta_destino_tipo,
          cat.nome AS categoria_nome,
-         cat.cor  AS categoria_cor
+         cat.cor  AS categoria_cor,
+         p.vezes  AS parcelas_total
   FROM lancamentos l
   JOIN contas c            ON c.id = l.conta_id
   LEFT JOIN contas cd      ON cd.id = l.conta_destino_id
   LEFT JOIN categorias cat ON cat.id = l.categoria_id
+  LEFT JOIN parcelamentos p ON p.id = l.parcelamento_id
 `;
 
-/** RF04: lista do mes, mais recente primeiro; empate desfeito pela ordem de criacao. */
+/**
+ * RF04: lista do mes, mais recente primeiro. Dentro do dia vale a hora; os
+ * lancamentos antigos, sem hora, vao para o fim do dia (NULL e o menor valor no
+ * SQLite). Empate final desfeito pela ordem de criacao.
+ */
 export async function listarPorMes(mes: Mes): Promise<LancamentoDetalhado[]> {
   const db = await obterDb();
   const { inicio, fim } = intervaloDoMes(mes);
   return db.getAllAsync<LancamentoDetalhado>(
     `${SELECT_DETALHADO}
      WHERE l.data BETWEEN ? AND ?
-     ORDER BY l.data DESC, l.id DESC`,
+     ORDER BY l.data DESC, l.hora DESC, l.id DESC`,
     inicio,
     fim,
+  );
+}
+
+/** Ultimos lancamentos que tocam a conta, nos dois papeis (extrato curto). */
+export async function listarDaConta(contaId: number, limite = 10): Promise<LancamentoDetalhado[]> {
+  const db = await obterDb();
+  return db.getAllAsync<LancamentoDetalhado>(
+    `${SELECT_DETALHADO}
+     WHERE l.conta_id = ? OR l.conta_destino_id = ?
+     ORDER BY l.data DESC, l.hora DESC, l.id DESC
+     LIMIT ?`,
+    contaId,
+    contaId,
+    limite,
   );
 }
 
@@ -62,12 +94,13 @@ export async function criar(dados: DadosLancamento): Promise<number> {
   const db = await obterDb();
   const r = await db.runAsync(
     `INSERT INTO lancamentos
-       (descricao, valor, tipo, data, conta_id, conta_destino_id, categoria_id, observacao)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (descricao, valor, tipo, data, hora, conta_id, conta_destino_id, categoria_id, observacao)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     dados.descricao.trim(),
     dados.valor,
     dados.tipo,
     dados.data,
+    dados.hora,
     dados.conta_id,
     dados.conta_destino_id,
     dados.categoria_id,
@@ -76,17 +109,88 @@ export async function criar(dados: DadosLancamento): Promise<number> {
   return r.lastInsertRowId;
 }
 
+/**
+ * Compra parcelada no cartao: um parcelamento + N despesas, uma por mes a
+ * partir da data da compra, cada uma caindo na sua fatura. Tudo numa transacao
+ * -- metade das parcelas gravadas seria uma divida que nao existe.
+ *
+ * As N parcelas entram no saldo do cartao desde ja (o limite e comprometido
+ * inteiro na compra, como no banco), mas cada uma so pesa nas despesas do mes
+ * em que cai -- e assim que a fatura chega.
+ */
+export async function criarParcelado(
+  dados: DadosLancamento,
+  vezes: number,
+  jurosBp: number,
+): Promise<number> {
+  const parcelas = calcularParcelas(dados.valor, vezes, jurosBp);
+  const total = parcelas.reduce((s, p) => s + p, 0);
+  const descricao = dados.descricao.trim();
+  const db = await obterDb();
+  let parcelamentoId = 0;
+
+  await db.withTransactionAsync(async () => {
+    const r = await db.runAsync(
+      `INSERT INTO parcelamentos (descricao, valor_original, juros_bp, vezes, total)
+       VALUES (?, ?, ?, ?, ?)`,
+      descricao,
+      dados.valor,
+      jurosBp,
+      vezes,
+      total,
+    );
+    parcelamentoId = r.lastInsertRowId;
+
+    for (let k = 0; k < parcelas.length; k++) {
+      await db.runAsync(
+        `INSERT INTO lancamentos
+           (descricao, valor, tipo, data, hora, conta_id, categoria_id, observacao,
+            parcelamento_id, parcela)
+         VALUES (?, ?, 'despesa', ?, ?, ?, ?, ?, ?, ?)`,
+        `${descricao} (${k + 1}/${vezes})`,
+        parcelas[k],
+        somarMesesISO(dados.data, k),
+        dados.hora,
+        dados.conta_id,
+        dados.categoria_id,
+        dados.observacao?.trim() || null,
+        parcelamentoId,
+        k + 1,
+      );
+    }
+  });
+
+  return parcelamentoId;
+}
+
+/** Apaga a compra parcelada inteira; o ON DELETE CASCADE leva as parcelas. */
+export async function excluirParcelamento(parcelamentoId: number): Promise<void> {
+  const db = await obterDb();
+  await db.runAsync('DELETE FROM parcelamentos WHERE id = ?', parcelamentoId);
+}
+
+export async function obterParcelamento(
+  parcelamentoId: number,
+): Promise<{ vezes: number; juros_bp: number; valor_original: number; total: number } | null> {
+  const db = await obterDb();
+  return db.getFirstAsync(
+    'SELECT vezes, juros_bp, valor_original, total FROM parcelamentos WHERE id = ?',
+    parcelamentoId,
+  );
+}
+
 export async function atualizar(id: number, dados: DadosLancamento): Promise<void> {
   const db = await obterDb();
   await db.runAsync(
     `UPDATE lancamentos
-     SET descricao = ?, valor = ?, tipo = ?, data = ?,
+     SET descricao = ?, valor = ?, tipo = ?, data = ?, hora = ?,
          conta_id = ?, conta_destino_id = ?, categoria_id = ?, observacao = ?
      WHERE id = ?`,
     dados.descricao.trim(),
     dados.valor,
     dados.tipo,
     dados.data,
+    dados.hora,
     dados.conta_id,
     dados.conta_destino_id,
     dados.categoria_id,
@@ -112,7 +216,7 @@ export async function resumoMes(mes: Mes): Promise<ResumoMes> {
     `SELECT COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor END), 0) AS receitas,
             COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor END), 0) AS despesas
      FROM lancamentos
-     WHERE data BETWEEN ? AND ?`,
+     WHERE data BETWEEN ? AND ? AND ${FORA_INVESTIMENTO}`,
     inicio,
     fim,
   );
@@ -137,7 +241,7 @@ export async function totaisPorCategoria(
             SUM(l.valor)                                AS total
      FROM lancamentos l
      LEFT JOIN categorias c ON c.id = l.categoria_id
-     WHERE l.tipo = ? AND l.data BETWEEN ? AND ?
+     WHERE l.tipo = ? AND l.data BETWEEN ? AND ? AND l.${FORA_INVESTIMENTO}
      GROUP BY l.categoria_id
      ORDER BY total DESC`,
     tipo,
@@ -188,7 +292,7 @@ export async function evolucaoMensal(mes: Mes, quantidade = 6): Promise<Evolucao
             COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor END), 0) AS receitas,
             COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor END), 0) AS despesas
      FROM lancamentos
-     WHERE data BETWEEN ? AND ?
+     WHERE data BETWEEN ? AND ? AND ${FORA_INVESTIMENTO}
      GROUP BY substr(data, 1, 7)`,
     inicio,
     fim,
@@ -225,7 +329,7 @@ export async function totaisPorConta(mes: Mes): Promise<TotalPorConta[]> {
      JOIN lancamentos l ON l.conta_id = c.id
                        AND l.data BETWEEN ? AND ?
                        AND l.tipo IN ('receita','despesa')
-     WHERE c.ativo = 1
+     WHERE c.ativo = 1 AND c.tipo <> 'investimento'
      GROUP BY c.id
      HAVING receitas > 0 OR despesas > 0
      ORDER BY (receitas + despesas) DESC`,
@@ -247,7 +351,7 @@ export async function totaisPorDia(mes: Mes): Promise<TotalPorDia[]> {
   const linhas = await db.getAllAsync<{ data: string; total: number }>(
     `SELECT data, SUM(valor) AS total
      FROM lancamentos
-     WHERE tipo = 'despesa' AND data BETWEEN ? AND ?
+     WHERE tipo = 'despesa' AND data BETWEEN ? AND ? AND ${FORA_INVESTIMENTO}
      GROUP BY data`,
     inicio,
     fim,

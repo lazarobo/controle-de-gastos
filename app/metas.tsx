@@ -7,7 +7,7 @@ import { useConsulta } from '../src/hooks/useConsulta';
 import { useTema } from '../src/contexto/TemaContexto';
 import * as metasRepo from '../src/repos/metas';
 import { useMoeda } from '../src/contexto/PrivacidadeContexto';
-import { espaco, raio, type Paleta } from '../src/utils/tema';
+import { espaco, raio, sombra, type Paleta } from '../src/utils/tema';
 
 export default function ListaMetas() {
   const { cores } = useTema();
@@ -67,9 +67,10 @@ function criarEstilos(cores: Paleta) {
       alignItems: 'center',
       gap: espaco.md,
       backgroundColor: cores.superficie,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: cores.borda,
-      borderRadius: raio.md,
+      borderRadius: raio.lg,
+      ...sombra(cores, 1),
       padding: espaco.md,
       marginBottom: espaco.sm,
     },

@@ -26,9 +26,19 @@ import {
   proximosLembretesBackup,
   proximosLembretesDiarios,
 } from '../src/utils/lembretes.ts';
+import { hexParaHsv, hsvParaHex, luminancia, normalizarHex } from '../src/utils/cor.ts';
+import {
+  agruparFaturas,
+  calcularParcelas,
+  faturaDe,
+  lerJurosBp,
+  somarMesesISO,
+} from '../src/utils/cartao.ts';
 import {
   dataParaISO,
   formatarData,
+  horaDe,
+  textoParaHora,
   intervaloDoMes,
   isoParaData,
   lerHora,
@@ -58,7 +68,15 @@ function sqlDoArquivo(caminho: string, marcador: string): string {
   const blocos = fonte.match(/`[^`]*`/g) ?? [];
   const bloco = blocos.find((b) => b.includes(marcador));
   assert.ok(bloco, `Nao achei em ${caminho} um SQL contendo "${marcador}"`);
-  return bloco.slice(1, -1);
+
+  // Trechos compartilhados (`const FORA_INVESTIMENTO = \`...\``) entram no SQL
+  // por interpolacao; resolve aqui como o JS resolveria. Interpolacao de
+  // variavel local (ex.: ${filtro}) fica intacta para o teste trocar.
+  const constantes = new Map<string, string>();
+  for (const m of fonte.matchAll(/const (\w+) = `([^`]*)`;/g)) constantes.set(m[1], m[2]);
+  return bloco
+    .slice(1, -1)
+    .replace(/\$\{(\w+)\}/g, (inteiro, nome) => constantes.get(nome) ?? inteiro);
 }
 
 // ---------------------------------------------------------------- moeda
@@ -465,39 +483,6 @@ teste('ON DELETE SET NULL preserva o lancamento e o total', () => {
   );
 });
 
-teste('investimentos: CHECK barra valor negativo', () => {
-  assert.throws(() =>
-    db.exec("INSERT INTO investimentos (nome, valor) VALUES ('XP', -100)"),
-  );
-});
-
-teste('investimentos: total() soma tudo em centavos', () => {
-  db.exec(`
-    INSERT INTO investimentos (nome, valor) VALUES
-      ('XP', 150000),
-      ('Nubank', 50000);
-  `);
-  const sqlTotal = sqlDoArquivo('src/repos/investimentos.ts', 'SUM(valor)');
-  const r: any = db.prepare(sqlTotal).get();
-  assert.equal(r.total, 200000); // R$ 1.500,00 + R$ 500,00
-});
-
-teste('investimentos: NAO entra no saldo total das contas (isolamento exigido pelo usuario)', () => {
-  const sqlSaldoTotal = sqlDoArquivo('src/repos/contas.ts', 'JOIN contas ld');
-  const antes: any = db.prepare(sqlSaldoTotal).get();
-
-  // Mais um investimento grande, so pra garantir que mexeria no total SE houvesse
-  // qualquer join ou referencia cruzada entre as duas tabelas.
-  db.exec("INSERT INTO investimentos (nome, valor) VALUES ('Rico', 999999900)");
-
-  const depois: any = db.prepare(sqlSaldoTotal).get();
-  assert.equal(
-    depois.total,
-    antes.total,
-    'saldoTotal() de contas.ts mudou depois de inserir em investimentos — nao deveria haver relacao nenhuma',
-  );
-});
-
 teste('metas: CHECK barra valor zero ou negativo', () => {
   assert.throws(() => db.exec('INSERT INTO metas (categoria_id, valor) VALUES (1, 0)'));
   assert.throws(() => db.exec('INSERT INTO metas (categoria_id, valor) VALUES (1, -100)'));
@@ -806,13 +791,9 @@ teste('totaisPorConta separa receita e despesa por conta, ignorando transferenci
   assert.equal(poupanca, undefined, 'conta so com transferencia vazou para o comparativo');
 });
 
-teste('migration 6/7: contas e investimentos ganharam cor com default utilizavel', () => {
+teste('migration 6: contas ganharam cor com default utilizavel', () => {
   const conta: any = tr.prepare('SELECT cor FROM contas WHERE id = 1').get();
   assert.match(conta.cor, /^#[0-9A-Fa-f]{6}$/);
-
-  tr.exec("INSERT INTO investimentos (nome, valor) VALUES ('XP', 100000)");
-  const inv: any = tr.prepare("SELECT cor FROM investimentos WHERE nome = 'XP'").get();
-  assert.match(inv.cor, /^#[0-9A-Fa-f]{6}$/);
 });
 
 tr.close();
@@ -927,6 +908,398 @@ teste('evento bate com contas.saldos() (as duas contabilidades nao divergem)', (
 });
 
 v8.close();
+
+// ------------------------- migration 9 (investimentos viram contas; hora)
+
+console.log('\nmigration 9 — investimentos como conta, hora nos lancamentos');
+
+function bancoV8ComDados(): DatabaseSync {
+  const b = bancoNaVersao(8);
+  b.exec(`
+    INSERT INTO contas (id, nome, tipo, saldo_inicial, cor) VALUES
+      (1, 'Nubank', 'corrente', 100000, '#8E24AA'),
+      (2, 'Floripa', 'evento', 0, '#00897B');
+    INSERT INTO lancamentos (descricao, valor, tipo, data, conta_id)
+      VALUES ('Mercado', 20000, 'despesa', '2026-09-01', 1);
+    INSERT INTO lancamentos (descricao, valor, tipo, data, conta_id, conta_destino_id)
+      VALUES ('Reserva', 30000, 'transferencia', '2026-09-02', 1, 2);
+    INSERT INTO investimentos (nome, valor, observacao, cor) VALUES
+      ('XP', 150000, 'CDB', '#1E88E5'),
+      ('Rico', 50000, NULL, '#F57C00');
+  `);
+  return b;
+}
+
+const migration9 = MIGRATIONS.find((m) => m.versao === 9)!;
+const v9 = bancoV8ComDados();
+aplicarMigration(v9, migration9);
+
+const SQL_INVESTIMENTOS = sqlDoArquivo('src/repos/investimentos.ts', 'AS rendimento').replace(
+  '${filtro}',
+  '',
+);
+const SQL_SALDO_TOTAL_V9 = sqlDoArquivo('src/repos/contas.ts', 'JOIN contas ld');
+const SQL_SALDOS_V9 = sqlDoArquivo('src/repos/contas.ts', 'AS saldo').replace('${filtro}', '');
+
+/** Mesma conta que investimentos.listar() faz depois da consulta. */
+function investimentosV9(b: DatabaseSync) {
+  return (b.prepare(SQL_INVESTIMENTOS).all() as any[]).map((l) => ({
+    ...l,
+    valor: l.aportado + l.rendimento,
+  }));
+}
+
+teste('cada investimento virou uma conta, com valor, cor e observacao', () => {
+  const xp: any = v9.prepare("SELECT * FROM contas WHERE nome = 'XP'").get();
+  assert.equal(xp.tipo, 'investimento');
+  assert.equal(xp.saldo_inicial, 150000);
+  assert.equal(xp.cor, '#1E88E5');
+  assert.equal(xp.observacao, 'CDB');
+  assert.equal(xp.ativo, 1);
+  assert.ok(xp.id > 2, 'id novo, depois das contas que ja existiam');
+});
+
+teste('as contas antigas ficaram intactas e os lancamentos apontando certo', () => {
+  const evento: any = v9.prepare('SELECT * FROM contas WHERE id = 2').get();
+  assert.equal(evento.tipo, 'evento');
+  const s: any[] = v9.prepare(SQL_SALDOS_V9).all();
+  assert.equal(s.find((l) => l.id === 1).saldo, 50000); // 1.000 - 200 - 300
+  assert.equal(s.find((l) => l.id === 2).saldo, 30000);
+});
+
+teste('a tabela investimentos sumiu, FKs limpas, versao 9 gravada', () => {
+  const t: any = v9
+    .prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'investimentos'")
+    .get();
+  assert.equal(t.n, 0);
+  assert.equal(v9.prepare('PRAGMA foreign_key_check').all().length, 0);
+  const v: any = v9.prepare('PRAGMA user_version').get();
+  assert.equal(v.user_version, 9);
+  assert.throws(() => v9.exec('DELETE FROM contas WHERE id = 1'), /FOREIGN KEY/i);
+});
+
+teste('lancamentos antigos ficam sem hora (nada inventado)', () => {
+  const l: any = v9.prepare("SELECT hora FROM lancamentos WHERE descricao = 'Mercado'").get();
+  assert.equal(l.hora, null);
+});
+
+teste('CHECK de hora aceita HH:MM e recusa horario impossivel', () => {
+  const inserir = (hora: string) =>
+    v9.exec(
+      `INSERT INTO lancamentos (descricao, valor, tipo, data, hora, conta_id) VALUES ('x', 1, 'despesa', '2026-09-03', '${hora}', 1)`,
+    );
+  inserir('23:59');
+  inserir('00:00');
+  assert.throws(() => inserir('24:00'));
+  assert.throws(() => inserir('12:60'));
+  assert.throws(() => inserir('9:30'));
+  v9.exec("DELETE FROM lancamentos WHERE descricao = 'x'");
+});
+
+teste('saldo total NAO inclui investimento (o migrado nao infla o saldo)', () => {
+  const r: any = v9.prepare(SQL_SALDO_TOTAL_V9).get();
+  // Nubank 500 + Floripa 300; XP e Rico ficam de fora.
+  assert.equal(r.total, 80000);
+});
+
+const xpId = (v9.prepare("SELECT id FROM contas WHERE nome = 'XP'").get() as any).id;
+
+teste('aporte (corrente -> investimento) baixa o saldo total e aumenta o investido', () => {
+  v9.exec(`
+    INSERT INTO lancamentos (descricao, valor, tipo, data, hora, conta_id, conta_destino_id)
+    VALUES ('Aporte em XP', 40000, 'transferencia', '2026-09-05', '10:00', 1, ${xpId});
+  `);
+  const total: any = v9.prepare(SQL_SALDO_TOTAL_V9).get();
+  assert.equal(total.total, 40000, 'saiu R$ 400,00 do que da para gastar');
+
+  const xp = investimentosV9(v9).find((i) => i.id === xpId);
+  assert.equal(xp.aportado, 190000);
+  assert.equal(xp.rendimento, 0);
+  assert.equal(xp.valor, 190000);
+});
+
+teste('aporte NAO e despesa: nao entra no resumo, na pizza nem no gasto por dia', () => {
+  const setembro = intervaloDoMes({ ano: 2026, mes: 9 });
+  const resumo: any = v9
+    .prepare(sqlDoArquivo('src/repos/lancamentos.ts', "THEN valor END), 0) AS receitas"))
+    .get(setembro.inicio, setembro.fim);
+  assert.equal(resumo.despesas, 20000, 'so o mercado');
+  const pizza: any[] = v9
+    .prepare(sqlDoArquivo('src/repos/lancamentos.ts', 'GROUP BY l.categoria_id'))
+    .all('despesa', setembro.inicio, setembro.fim);
+  assert.equal(pizza.reduce((s, l) => s + l.total, 0), 20000);
+});
+
+teste('rendimento muda o valor do investimento, mas fica fora dos KPIs do mes', () => {
+  // O que registrarValorAtual() grava: a diferenca como receita na propria conta.
+  v9.exec(`
+    INSERT INTO lancamentos (descricao, valor, tipo, data, hora, conta_id)
+    VALUES ('Rendimento', 2500, 'receita', '2026-09-30', '18:00', ${xpId});
+  `);
+  const setembro = intervaloDoMes({ ano: 2026, mes: 9 });
+  const resumo: any = v9
+    .prepare(sqlDoArquivo('src/repos/lancamentos.ts', "THEN valor END), 0) AS receitas"))
+    .get(setembro.inicio, setembro.fim);
+  assert.equal(resumo.receitas, 0, 'render nao e salario');
+
+  const evolucao: any[] = v9
+    .prepare(sqlDoArquivo('src/repos/lancamentos.ts', 'GROUP BY substr(data, 1, 7)'))
+    .all(setembro.inicio, setembro.fim);
+  assert.equal(evolucao[0].receitas, 0);
+
+  const porConta: any[] = v9
+    .prepare(sqlDoArquivo('src/repos/lancamentos.ts', 'HAVING receitas > 0'))
+    .all(setembro.inicio, setembro.fim);
+  assert.equal(porConta.find((l) => l.conta_id === xpId), undefined);
+
+  const xp = investimentosV9(v9).find((i) => i.id === xpId);
+  assert.equal(xp.aportado, 190000, 'o que voce colocou nao muda');
+  assert.equal(xp.rendimento, 2500);
+  assert.equal(xp.valor, 192500);
+
+  const total: any = v9.prepare(SQL_SALDO_TOTAL_V9).get();
+  assert.equal(total.total, 40000, 'rendimento nao mexe no saldo do Inicio');
+});
+
+teste('investimento bate com contas.saldos() (as duas contabilidades nao divergem)', () => {
+  const s: any = (v9.prepare(SQL_SALDOS_V9).all() as any[]).find((l) => l.id === xpId);
+  assert.equal(s.saldo, 192500);
+});
+
+teste('resgate (investimento -> corrente) devolve ao saldo e reduz o aportado', () => {
+  v9.exec(`
+    INSERT INTO lancamentos (descricao, valor, tipo, data, conta_id, conta_destino_id)
+    VALUES ('Resgate', 10000, 'transferencia', '2026-10-01', ${xpId}, 1);
+  `);
+  const total: any = v9.prepare(SQL_SALDO_TOTAL_V9).get();
+  assert.equal(total.total, 50000);
+  const xp = investimentosV9(v9).find((i) => i.id === xpId);
+  assert.equal(xp.aportado, 180000);
+  assert.equal(xp.valor, 182500);
+  assert.equal(xp.ultima_movimentacao, '2026-10-01');
+});
+
+// A lista usa o SELECT atual, que ja junta parcelamentos (migration 10): leva
+// este banco migrado da 9 para a 10, com dados dentro -- o caminho de quem atualiza.
+aplicarMigration(v9, MIGRATIONS.find((m) => m.versao === 10)!);
+
+teste('lista do mes ordena por hora dentro do dia; sem hora vai para o fim', () => {
+  v9.exec(`
+    INSERT INTO lancamentos (descricao, valor, tipo, data, hora, conta_id) VALUES
+      ('Cafe',   500, 'despesa', '2026-11-02', '08:15', 1),
+      ('Antigo', 500, 'despesa', '2026-11-02', NULL,    1),
+      ('Janta', 4000, 'despesa', '2026-11-02', '20:40', 1),
+      ('Almoco',2500, 'despesa', '2026-11-02', '12:30', 1);
+  `);
+  const sql = sqlDoArquivo('src/repos/lancamentos.ts', 'WHERE l.data BETWEEN');
+  const novembro = intervaloDoMes({ ano: 2026, mes: 11 });
+  const linhas: any[] = v9.prepare(sql).all(novembro.inicio, novembro.fim);
+  assert.deepEqual(
+    linhas.map((l) => l.descricao),
+    ['Janta', 'Almoco', 'Cafe', 'Antigo'],
+  );
+  assert.equal(linhas[0].conta_tipo, 'corrente');
+});
+
+v9.close();
+
+// -------------------------------------------- cartao de credito (migration 10)
+
+console.log('\ncartao de credito');
+
+teste('faturaDe: compra ate o fechamento cai na fatura do mes; depois, na seguinte', () => {
+  // Fecha dia 28, vence dia 5 do mes seguinte.
+  assert.deepEqual(faturaDe('2026-10-28', 28, 5), {
+    fechamento: '2026-10-28',
+    vencimento: '2026-11-05',
+  });
+  assert.deepEqual(faturaDe('2026-10-29', 28, 5), {
+    fechamento: '2026-11-28',
+    vencimento: '2026-12-05',
+  });
+  // Virada do ano.
+  assert.deepEqual(faturaDe('2026-12-30', 28, 5), {
+    fechamento: '2027-01-28',
+    vencimento: '2027-02-05',
+  });
+  // Fecha dia 3, vence dia 10 do MESMO mes.
+  assert.deepEqual(faturaDe('2026-10-02', 3, 10), {
+    fechamento: '2026-10-03',
+    vencimento: '2026-10-10',
+  });
+});
+
+teste('faturaDe: fechamento dia 31 vira o ultimo dia em fevereiro', () => {
+  assert.deepEqual(faturaDe('2026-02-28', 31, 10), {
+    fechamento: '2026-02-28',
+    vencimento: '2026-03-10',
+  });
+  assert.equal(faturaDe('2026-03-01', 31, 10).fechamento, '2026-03-31');
+});
+
+teste('somarMesesISO nao passa do ultimo dia do mes', () => {
+  assert.equal(somarMesesISO('2026-01-31', 1), '2026-02-28');
+  assert.equal(somarMesesISO('2026-11-15', 3), '2027-02-15');
+});
+
+teste('parcelas sem juros somam exatamente o valor (sobra na primeira)', () => {
+  assert.deepEqual(calcularParcelas(10000, 3), [3334, 3333, 3333]);
+  assert.deepEqual(calcularParcelas(12000, 1), [12000]);
+  const p = calcularParcelas(99999, 7);
+  assert.equal(p.reduce((s, x) => s + x, 0), 99999);
+  assert.ok(p.every((x) => Number.isInteger(x)));
+});
+
+teste('parcelas com juros: tabela Price, parcela fixa e inteira, total acima do valor', () => {
+  // R$ 1.000,00 em 12x a 1,99% a.m. = 12 x R$ 94,50 (1000 * 0,0199 / (1 - 1,0199^-12)).
+  const p = calcularParcelas(100000, 12, 199);
+  assert.equal(p.length, 12);
+  assert.ok(p.every((x) => x === p[0] && Number.isInteger(x)));
+  assert.equal(p[0], 9450);
+  assert.ok(p[0] * 12 > 100000);
+});
+
+teste('lerJurosBp: virgula ou ponto; vazio e sem juros; texto invalido e null', () => {
+  assert.equal(lerJurosBp('1,99'), 199);
+  assert.equal(lerJurosBp('2'), 200);
+  assert.equal(lerJurosBp(''), 0);
+  assert.equal(lerJurosBp('abc'), null);
+  assert.equal(lerJurosBp('1,999'), null);
+});
+
+teste('agruparFaturas: atual, futuras com parcelas, fechada a pagar e fatura inicial', () => {
+  const faturas = agruparFaturas(
+    [
+      { data: '2026-10-10', tipo: 'despesa', valor: 30000 }, // fatura que vence 05/11
+      { data: '2026-10-25', tipo: 'despesa', valor: 10000 }, // parcela 1 -> vence 05/11
+      { data: '2026-11-25', tipo: 'despesa', valor: 10000 }, // parcela 2 -> vence 05/12
+      { data: '2026-12-25', tipo: 'despesa', valor: 10000 }, // parcela 3 -> vence 05/01
+      { data: '2026-10-12', tipo: 'receita', valor: 5000 }, //  estorno
+      { data: '2026-08-10', tipo: 'despesa', valor: 777 }, //   ja vencida, some
+    ],
+    28,
+    5,
+    '2026-10-31', // fatura de 28/10 ja fechou; a atual fecha 28/11
+    { data: '2026-10-01', valor: 20000 },
+  );
+  assert.deepEqual(
+    faturas.map((f) => [f.vencimento, f.total, f.atual]),
+    [
+      ['2026-11-05', 55000, false], // fechada, a pagar: 300 + 100 - 50 + 200 inicial
+      ['2026-12-05', 10000, true],
+      ['2027-01-05', 10000, false],
+    ],
+  );
+});
+
+const cc = bancoNaVersao(VERSAO_ALVO);
+cc.exec(`
+  INSERT INTO contas (id, nome, tipo, saldo_inicial, limite, dia_fechamento, dia_vencimento, fatura_inicial)
+  VALUES
+    (1, 'Corrente', 'corrente', 500000, NULL, NULL, NULL, 0),
+    -- Ja tinha R$ 300,00 usados do limite de R$ 2.000,00 no cadastro.
+    (2, 'Roxinho',  'cartao',   -30000, 200000, 28, 5, 30000);
+  INSERT INTO categorias (id, nome, tipo, cor) VALUES (1, 'Eletrônicos', 'despesa', '#111');
+  INSERT INTO parcelamentos (id, descricao, valor_original, juros_bp, vezes, total)
+    VALUES (1, 'Fone', 30000, 0, 3, 30000);
+  INSERT INTO lancamentos (descricao, valor, tipo, data, conta_id, categoria_id, parcelamento_id, parcela) VALUES
+    ('Fone (1/3)', 10000, 'despesa', '2026-10-10', 2, 1, 1, 1),
+    ('Fone (2/3)', 10000, 'despesa', '2026-11-10', 2, 1, 1, 2),
+    ('Fone (3/3)', 10000, 'despesa', '2026-12-10', 2, 1, 1, 3);
+`);
+const SQL_SALDOS_CC = sqlDoArquivo('src/repos/contas.ts', 'AS saldo').replace('${filtro}', '');
+const saldoDe = (b: DatabaseSync, id: number) =>
+  (b.prepare(SQL_SALDOS_CC).all() as any[]).find((l) => l.id === id).saldo;
+
+teste('compra parcelada compromete o limite inteiro na hora', () => {
+  // disponivel = limite + saldo = 2.000 - 300 - 300
+  assert.equal(200000 + saldoDe(cc, 2), 140000);
+});
+
+teste('cada mes so conta a parcela que cai nele nas despesas', () => {
+  const sql = sqlDoArquivo('src/repos/lancamentos.ts', "THEN valor END), 0) AS receitas");
+  const nov = intervaloDoMes({ ano: 2026, mes: 11 });
+  const r: any = cc.prepare(sql).get(nov.inicio, nov.fim);
+  assert.equal(r.despesas, 10000);
+});
+
+teste('pagar a fatura (corrente -> cartao) devolve limite e NAO e despesa', () => {
+  cc.exec(`
+    INSERT INTO lancamentos (descricao, valor, tipo, data, conta_id, conta_destino_id)
+    VALUES ('Pagamento fatura', 40000, 'transferencia', '2026-11-05', 1, 2);
+  `);
+  assert.equal(200000 + saldoDe(cc, 2), 180000, 'o limite voltou R$ 400,00');
+  assert.equal(saldoDe(cc, 1), 460000, 'saiu da corrente');
+  const sql = sqlDoArquivo('src/repos/lancamentos.ts', "THEN valor END), 0) AS receitas");
+  const nov = intervaloDoMes({ ano: 2026, mes: 11 });
+  const r: any = cc.prepare(sql).get(nov.inicio, nov.fim);
+  assert.equal(r.despesas, 10000, 'pagamento nao duplica o gasto');
+});
+
+teste('excluir o parcelamento apaga todas as parcelas (CASCADE)', () => {
+  cc.exec('DELETE FROM parcelamentos WHERE id = 1');
+  const r: any = cc
+    .prepare('SELECT COUNT(*) AS n FROM lancamentos WHERE parcelamento_id IS NOT NULL')
+    .get();
+  assert.equal(r.n, 0);
+  assert.equal(cc.prepare('PRAGMA foreign_key_check').all().length, 0);
+});
+
+teste('CHECKs do cartao: dia 1..31, limite e fatura inicial nao negativos, 2..48 vezes', () => {
+  assert.throws(() => cc.exec("UPDATE contas SET dia_fechamento = 32 WHERE id = 2"));
+  assert.throws(() => cc.exec("UPDATE contas SET limite = -1 WHERE id = 2"));
+  assert.throws(() => cc.exec("UPDATE contas SET fatura_inicial = -1 WHERE id = 2"));
+  assert.throws(() =>
+    cc.exec(
+      "INSERT INTO parcelamentos (descricao, valor_original, vezes, total) VALUES ('x', 100, 1, 100)",
+    ),
+  );
+});
+
+cc.close();
+
+console.log('\nhora e cor');
+
+teste('horaDe usa o relogio local e sempre dois digitos', () => {
+  assert.equal(horaDe(new Date(2026, 0, 31, 7, 5)), '07:05');
+  assert.equal(horaDe(new Date(2026, 0, 31, 23, 59)), '23:59');
+});
+
+teste('textoParaHora: vazio e null, invalido e undefined', () => {
+  assert.equal(textoParaHora(''), null);
+  assert.equal(textoParaHora('  '), null);
+  assert.equal(textoParaHora('09:30'), '09:30');
+  assert.equal(textoParaHora('25:00'), undefined);
+  assert.equal(textoParaHora('9:3'), undefined);
+});
+
+teste('normalizarHex aceita 3 e 6 digitos, com ou sem #, e recusa o resto', () => {
+  assert.equal(normalizarHex('#abc'), '#AABBCC');
+  assert.equal(normalizarHex('1e88e5'), '#1E88E5');
+  assert.equal(normalizarHex('#12345'), null);
+  assert.equal(normalizarHex('red'), null);
+});
+
+teste('hex -> HSV -> hex devolve a mesma cor para a paleta inteira', () => {
+  for (const c of ['#E53935', '#FDD835', '#00897B', '#1E88E5', '#546E7A', '#000000', '#FFFFFF']) {
+    assert.equal(hsvParaHex(hexParaHsv(c)), c);
+  }
+});
+
+teste('HSV nos extremos: matiz 0/120/240 em saturacao e brilho cheios', () => {
+  assert.equal(hsvParaHex({ h: 0, s: 1, v: 1 }), '#FF0000');
+  assert.equal(hsvParaHex({ h: 120, s: 1, v: 1 }), '#00FF00');
+  assert.equal(hsvParaHex({ h: 240, s: 1, v: 1 }), '#0000FF');
+  assert.equal(hsvParaHex({ h: 360, s: 1, v: 1 }), '#FF0000');
+  assert.equal(hsvParaHex({ h: 200, s: 0, v: 0.5 }), '#808080');
+});
+
+teste('luminancia separa cor clara de escura (texto sobre a cor)', () => {
+  assert.ok(luminancia('#FFFFFF') > 0.99);
+  assert.ok(luminancia('#000000') < 0.01);
+  assert.ok(luminancia('#FDD835') > 0.45, 'amarelo pede texto escuro');
+  assert.ok(luminancia('#1E88E5') < 0.45, 'azul pede texto branco');
+});
 
 db.close();
 

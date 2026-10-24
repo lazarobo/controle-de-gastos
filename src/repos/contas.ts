@@ -8,6 +8,18 @@ export interface DadosConta {
   saldo_inicial: number;
   ativo: boolean;
   cor: string;
+  /** So para tipo 'cartao'; nos outros tipos as colunas ficam null. */
+  cartao?: DadosCartao | null;
+}
+
+export interface DadosCartao {
+  /** Centavos. */
+  limite: number;
+  /** null em cartao antigo, cadastrado antes da migration 10. */
+  dia_fechamento: number | null;
+  dia_vencimento: number | null;
+  /** Centavos. So no cadastro: a fatura que ja estava aberta. */
+  fatura_inicial?: number;
 }
 
 export async function listar(incluirInativas = false): Promise<Conta[]> {
@@ -26,12 +38,16 @@ export async function obter(id: number): Promise<Conta | null> {
 export async function criar(dados: DadosConta): Promise<number> {
   const db = await obterDb();
   const r = await db.runAsync(
-    'INSERT INTO contas (nome, tipo, saldo_inicial, ativo, cor) VALUES (?, ?, ?, ?, ?)',
+    `INSERT INTO contas
+       (nome, tipo, saldo_inicial, ativo, cor, limite, dia_fechamento, dia_vencimento, fatura_inicial)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     dados.nome.trim(),
     dados.tipo,
     dados.saldo_inicial,
     dados.ativo ? 1 : 0,
     dados.cor,
+    ...camposCartao(dados),
+    (dados.tipo === 'cartao' && dados.cartao?.fatura_inicial) || 0,
   );
   return r.lastInsertRowId;
 }
@@ -39,14 +55,24 @@ export async function criar(dados: DadosConta): Promise<number> {
 export async function atualizar(id: number, dados: DadosConta): Promise<void> {
   const db = await obterDb();
   await db.runAsync(
-    'UPDATE contas SET nome = ?, tipo = ?, saldo_inicial = ?, ativo = ?, cor = ? WHERE id = ?',
+    `UPDATE contas
+     SET nome = ?, tipo = ?, saldo_inicial = ?, ativo = ?, cor = ?,
+         limite = ?, dia_fechamento = ?, dia_vencimento = ?
+     WHERE id = ?`,
     dados.nome.trim(),
     dados.tipo,
     dados.saldo_inicial,
     dados.ativo ? 1 : 0,
     dados.cor,
+    ...camposCartao(dados),
     id,
   );
+}
+
+/** Limite e dias so valem em cartao; trocar o tipo para outro os limpa. */
+function camposCartao(dados: DadosConta): [number | null, number | null, number | null] {
+  if (dados.tipo !== 'cartao' || !dados.cartao) return [null, null, null];
+  return [dados.cartao.limite, dados.cartao.dia_fechamento, dados.cartao.dia_vencimento];
 }
 
 /**
@@ -120,7 +146,10 @@ export async function saldos(incluirInativas = false): Promise<SaldoConta[]> {
 }
 
 /**
- * Soma dos saldos das contas ativas (KPI do dashboard, RF05).
+ * Soma dos saldos das contas ativas (KPI do dashboard, RF05), SEM as contas de
+ * investimento: o saldo total responde "quanto tenho para gastar". Por isso um
+ * aporte (corrente -> investimento) baixa o total -- o dinheiro saiu dali -- e
+ * o rendimento nao o altera. O investido aparece em cartao proprio.
  *
  * Uma transferencia entre duas contas ATIVAS se anula aqui (-valor na origem,
  * +valor no destino), que e exatamente o certo: mover dinheiro de bolso nao
@@ -135,16 +164,16 @@ export async function saldoTotal(): Promise<number> {
                 SELECT SUM(CASE l.tipo WHEN 'receita' THEN l.valor ELSE -l.valor END)
                 FROM lancamentos l
                 JOIN contas lc ON lc.id = l.conta_id
-                WHERE lc.ativo = 1
+                WHERE lc.ativo = 1 AND lc.tipo <> 'investimento'
               ), 0)
             + COALESCE((
                 SELECT SUM(l.valor)
                 FROM lancamentos l
                 JOIN contas ld ON ld.id = l.conta_destino_id
-                WHERE ld.ativo = 1 AND l.tipo = 'transferencia'
+                WHERE ld.ativo = 1 AND ld.tipo <> 'investimento' AND l.tipo = 'transferencia'
               ), 0) AS total
      FROM contas c
-     WHERE c.ativo = 1`,
+     WHERE c.ativo = 1 AND c.tipo <> 'investimento'`,
   );
   return r?.total ?? 0;
 }

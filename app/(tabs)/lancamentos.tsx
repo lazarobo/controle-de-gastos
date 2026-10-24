@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Aparecer, NumeroAnimado, Tocavel } from '../../src/components/animacao';
 import { Avatar } from '../../src/components/Avatar';
 import { CartaoDestaque } from '../../src/components/CartaoDestaque';
+import { Fab } from '../../src/components/Fab';
 import { SeletorMes } from '../../src/components/SeletorMes';
 import { Carregando, Vazio } from '../../src/components/ui';
 import { useConsulta } from '../../src/hooks/useConsulta';
@@ -12,7 +13,7 @@ import * as lancamentosRepo from '../../src/repos/lancamentos';
 import { useMoeda } from '../../src/contexto/PrivacidadeContexto';
 import { formatarDataCurta, mesAtual, type Mes } from '../../src/utils/date';
 import { useTema } from '../../src/contexto/TemaContexto';
-import { espaco, raio, type Paleta } from '../../src/utils/tema';
+import { espaco, raio, sombra, type Paleta } from '../../src/utils/tema';
 import type { LancamentoDetalhado, ResumoMes } from '../../src/types';
 
 interface Dados {
@@ -48,6 +49,7 @@ export default function ListaLancamentos() {
       // Transferencia fica fora: ela move dinheiro entre contas proprias, entao
       // somar como saida (ou entrada) inventaria um gasto que nao existiu no dia.
       total: itens.reduce((soma, i) => {
+        if (i.conta_tipo === 'investimento') return soma;
         if (i.tipo === 'receita') return soma + i.valor;
         if (i.tipo === 'despesa') return soma - i.valor;
         return soma;
@@ -120,23 +122,37 @@ export default function ListaLancamentos() {
         )}
         renderItem={({ item }) => {
           const transferencia = item.tipo === 'transferencia';
+          const aporte = transferencia && item.conta_destino_tipo === 'investimento';
+          // Receita/despesa dentro de um investimento e ajuste de valor, nao
+          // ganho nem gasto -- por isso tambem nao entra no total do dia.
+          const rendimento = !transferencia && item.conta_tipo === 'investimento';
+          const corItem = transferencia
+            ? aporte
+              ? cores.investimento
+              : cores.transferencia
+            : rendimento
+              ? cores.investimento
+              : item.categoria_cor ?? cores.neutra;
           return (
             <Tocavel style={e.item} onPress={() => router.push(`/lancamento/${item.id}`)}>
               {/* Cor da categoria no avatar: da para achar "o mercado" de relance. */}
               <Avatar
-                nome={transferencia ? '' : item.categoria_nome ?? item.descricao}
-                cor={transferencia ? cores.transferencia : item.categoria_cor ?? cores.neutra}
-                glifo={transferencia ? '⇄' : undefined}
-                tamanho={36}
+                nome={item.categoria_nome ?? item.descricao}
+                cor={corItem}
+                icone={aporte || rendimento ? 'investir' : transferencia ? 'transferir' : undefined}
+                tamanho={40}
               />
               <View style={e.meio}>
                 <Text style={e.descricao} numberOfLines={1}>
                   {item.descricao}
                 </Text>
                 <Text style={e.subtitulo} numberOfLines={1}>
+                  {item.hora ? `${item.hora} · ` : ''}
                   {transferencia
                     ? `${item.conta_nome} → ${item.conta_destino_nome ?? '?'}`
-                    : `${item.categoria_nome ?? 'Sem categoria'} · ${item.conta_nome}`}
+                    : rendimento
+                      ? `Investimento · ${item.conta_nome}`
+                      : `${item.categoria_nome ?? 'Sem categoria'} · ${item.conta_nome}`}
                 </Text>
               </View>
               <Text
@@ -144,11 +160,11 @@ export default function ListaLancamentos() {
                   e.valor,
                   {
                     color:
-                      item.tipo === 'receita'
-                        ? cores.receita
-                        : item.tipo === 'despesa'
-                          ? cores.despesa
-                          : cores.transferencia,
+                      transferencia
+                        ? corItem
+                        : item.tipo === 'receita'
+                          ? cores.receita
+                          : cores.despesa,
                   },
                 ]}
               >
@@ -161,13 +177,7 @@ export default function ListaLancamentos() {
         }}
       />
 
-      <Tocavel
-        style={e.fab}
-        onPress={() => router.push('/lancamento/novo')}
-        accessibilityLabel="Registrar gasto"
-      >
-        <Text style={e.fabTexto}>+</Text>
-      </Tocavel>
+      <Fab onPress={() => router.push('/lancamento/novo')} rotulo="Registrar gasto" />
     </View>
   );
 }
@@ -210,28 +220,16 @@ function criarEstilos(cores: Paleta) {
       alignItems: 'center',
       gap: espaco.md,
       backgroundColor: cores.superficie,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: cores.borda,
-      borderRadius: raio.md,
+      borderRadius: raio.lg,
       padding: espaco.md,
       marginBottom: espaco.sm,
+      ...sombra(cores, 1),
     },
     meio: { flex: 1 },
     descricao: { fontSize: 15, fontWeight: '600', color: cores.texto },
     subtitulo: { fontSize: 12, color: cores.textoFraco, marginTop: 2 },
     valor: { fontSize: 15, fontWeight: '700' },
-    fab: {
-      position: 'absolute',
-      right: espaco.lg,
-      bottom: espaco.lg,
-      width: 60,
-      height: 60,
-      borderRadius: 30,
-      backgroundColor: cores.primaria,
-      alignItems: 'center',
-      justifyContent: 'center',
-      elevation: 6,
-    },
-    fabTexto: { color: '#FFF', fontSize: 34, lineHeight: 38, fontWeight: '300' },
   });
 }

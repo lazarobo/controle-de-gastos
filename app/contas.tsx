@@ -10,8 +10,8 @@ import { useConsulta } from '../src/hooks/useConsulta';
 import { useTema } from '../src/contexto/TemaContexto';
 import * as contasRepo from '../src/repos/contas';
 import { useMoeda } from '../src/contexto/PrivacidadeContexto';
-import { espaco, raio, type Paleta } from '../src/utils/tema';
-import { TIPOS_CONTA } from '../src/types';
+import { espaco, raio, sombra, type Paleta } from '../src/utils/tema';
+import { ehContaComum, TIPOS_CONTA } from '../src/types';
 
 const ROTULO_TIPO = Object.fromEntries(TIPOS_CONTA.map((t) => [t.valor, t.rotulo]));
 
@@ -26,9 +26,9 @@ export default function ListaContas() {
   // Inclui inativas: esta e a unica tela onde elas podem ser reativadas.
   const { dados, carregando } = useConsulta(() => contasRepo.saldos(true));
 
-  // Eventos tambem sao contas (migration 8), mas tem tela propria em
-  // Ajustes › Eventos; aqui ficam so as contas do dia a dia.
-  const contas = (dados ?? []).filter((s) => s.conta.tipo !== 'evento');
+  // Eventos e investimentos tambem sao contas (migrations 8 e 9), mas tem
+  // telas proprias; aqui ficam so as contas do dia a dia.
+  const contas = (dados ?? []).filter((s) => ehContaComum(s.conta.tipo));
   const ativas = contas.filter((s) => s.conta.ativo === 1);
   const total = ativas.reduce((soma, s) => soma + s.saldo, 0);
 
@@ -94,7 +94,9 @@ export default function ListaContas() {
               <Aparecer key={conta.id} atraso={100 + i * 40}>
                 <Tocavel
                   style={[e.item, conta.ativo === 0 && e.inativa]}
-                  onPress={() => router.push(`/conta/${conta.id}`)}
+                  onPress={() =>
+                    router.push(conta.tipo === 'cartao' ? `/cartao/${conta.id}` : `/conta/${conta.id}`)
+                  }
                 >
                   <Avatar nome={conta.nome} cor={conta.cor} />
                   <View style={{ flex: 1 }}>
@@ -154,9 +156,10 @@ function criarEstilos(cores: Paleta) {
       alignItems: 'center',
       gap: espaco.md,
       backgroundColor: cores.superficie,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: cores.borda,
-      borderRadius: raio.md,
+      borderRadius: raio.lg,
+      ...sombra(cores, 1),
       padding: espaco.md,
     },
     inativa: { opacity: 0.55 },

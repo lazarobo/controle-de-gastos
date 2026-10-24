@@ -1,5 +1,9 @@
-/** 'evento' (migration 8): viagem, show -- dinheiro separado e gasto de la. */
-export type TipoConta = 'corrente' | 'poupanca' | 'cartao' | 'dinheiro' | 'evento';
+/**
+ * 'evento' (migration 8): viagem, show -- dinheiro separado e gasto de la.
+ * 'investimento' (migration 9): recebe aportes por movimentacao e fica FORA
+ * do saldo total e dos KPIs do mes.
+ */
+export type TipoConta = 'corrente' | 'poupanca' | 'cartao' | 'dinheiro' | 'evento' | 'investimento';
 
 /**
  * O que uma CATEGORIA classifica, e o eixo dos relatorios. Transferencia fica
@@ -23,6 +27,15 @@ export interface Conta {
   /** 'YYYY-MM-DD', so em evento (CHECK no banco garante). */
   data_inicio: string | null;
   data_fim: string | null;
+  /** Texto livre (migration 9); hoje so a tela de investimento mostra. */
+  observacao: string | null;
+  /** So cartao (migration 10). Centavos. */
+  limite: number | null;
+  /** So cartao: dia do mes (1-31). */
+  dia_fechamento: number | null;
+  dia_vencimento: number | null;
+  /** So cartao: fatura que ja estava aberta no cadastro, em centavos. */
+  fatura_inicial: number;
   criado_em: string;
 }
 
@@ -58,6 +71,8 @@ export interface Lancamento {
   tipo: TipoLancamento;
   /** 'YYYY-MM-DD' no fuso local. Ver src/utils/date.ts. */
   data: string;
+  /** 'HH:MM' local, ou null nos lancamentos anteriores a migration 9. */
+  hora: string | null;
   /** Na transferencia, esta e a conta de ORIGEM. */
   conta_id: number;
   /** So preenchido em transferencia: a conta de destino. */
@@ -65,15 +80,50 @@ export interface Lancamento {
   /** Sempre null em transferencia (garantido por CHECK no banco). */
   categoria_id: number | null;
   observacao: string | null;
+  /** Compra parcelada a que esta parcela pertence (migration 10). */
+  parcelamento_id: number | null;
+  /** 1..N dentro do parcelamento. */
+  parcela: number | null;
   criado_em: string;
 }
 
 /** Lancamento com os nomes resolvidos, usado nas listagens. */
 export interface LancamentoDetalhado extends Lancamento {
   conta_nome: string;
+  conta_tipo: TipoConta;
   conta_destino_nome: string | null;
+  conta_destino_tipo: TipoConta | null;
   categoria_nome: string | null;
   categoria_cor: string | null;
+  /** N do parcelamento (para mostrar "2/10"), ou null. */
+  parcelas_total: number | null;
+}
+
+/** Lancamento reduzido ao que a fatura precisa. */
+export interface ItemFatura {
+  data: string;
+  tipo: TipoLancamento;
+  valor: number;
+}
+
+/** Uma fatura do cartao com o que ja caiu nela, em centavos. */
+export interface FaturaResumo {
+  fechamento: string;
+  vencimento: string;
+  /** Compras - estornos do ciclo (inclui parcelas futuras ja lancadas). */
+  total: number;
+  /** Quantos lancamentos caem nela. */
+  itens: number;
+  /** A fatura em que estamos hoje (aberta, ainda nao fechou). */
+  atual: boolean;
+}
+
+export interface CartaoResumo {
+  conta: Conta;
+  /** Centavos: o que voce deve no cartao, somando todas as faturas (>= 0 em geral). */
+  divida: number;
+  /** limite - divida. Pode ficar negativo se estourou. */
+  disponivel: number;
 }
 
 export interface SaldoConta {
@@ -121,21 +171,19 @@ export interface TotalPorCategoria {
 }
 
 /**
- * Separado de Conta de proposito: nao entra no saldo total do dashboard (RF05)
- * e o valor nao vem de lancamentos -- e digitado manualmente cada vez que o
- * usuario confere o extrato do banco/corretora.
+ * Investimento e uma conta com tipo = 'investimento' (migration 9). Os numeros
+ * separam o que VOCE colocou do que o mercado fez, em centavos:
+ *   aportado   = saldo inicial + movimentacoes recebidas - resgates
+ *   rendimento = receitas - despesas lancadas na propria conta (ajustes de valor)
+ *   valor      = aportado + rendimento (o mesmo que contas.saldos() calcula)
  */
-export interface Investimento {
-  id: number;
-  /** Nome do banco/corretora. */
-  nome: string;
-  /** Centavos. */
+export interface InvestimentoResumo {
+  conta: Conta;
+  aportado: number;
+  rendimento: number;
   valor: number;
-  observacao: string | null;
-  /** Hex, usado na rosca de distribuicao por banco (migration 7). */
-  cor: string;
-  criado_em: string;
-  atualizado_em: string;
+  /** 'YYYY-MM-DD' do ultimo lancamento que tocou a conta, ou da criacao. */
+  ultima_movimentacao: string;
 }
 
 /** RF10: teto de gasto mensal por categoria. Uma por categoria, recorrente. */
@@ -181,3 +229,11 @@ export const TIPOS_CONTA: { valor: TipoConta; rotulo: string }[] = [
   { valor: 'cartao', rotulo: 'Cartão de crédito' },
   { valor: 'dinheiro', rotulo: 'Dinheiro' },
 ];
+
+/**
+ * Conta "do dia a dia": as que entram no saldo total e aparecem em Contas.
+ * Evento e investimento tambem sao contas, mas tem telas proprias.
+ */
+export function ehContaComum(tipo: TipoConta): boolean {
+  return tipo !== 'evento' && tipo !== 'investimento';
+}

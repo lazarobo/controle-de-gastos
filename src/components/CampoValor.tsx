@@ -12,6 +12,8 @@ interface Props {
   onChange: (centavos: number) => void;
   erro?: string | null;
   autoFocus?: boolean;
+  /** Cor do numero; o formulario de lancamento usa a cor do tipo. */
+  cor?: string;
 }
 
 /**
@@ -25,7 +27,7 @@ interface Props {
  * contagem de digitos, entao o backspace "funciona sozinho" sem lógica extra -
  * a pontuação é decorativa, nunca faz parte do valor real.
  */
-export function CampoValor({ rotulo, valor, onChange, erro, autoFocus }: Props) {
+export function CampoValor({ rotulo, valor, onChange, erro, autoFocus, cor }: Props) {
   const { cores } = useTema();
   const e = useMemo(() => criarEstilos(cores), [cores]);
   const exibicao = valor > 0 ? formatarValor(valor) : '';
@@ -47,7 +49,7 @@ export function CampoValor({ rotulo, valor, onChange, erro, autoFocus }: Props) 
           placeholder="0,00"
           placeholderTextColor={cores.textoFraco}
           autoFocus={autoFocus}
-          style={e.input}
+          style={[e.input, cor ? { color: cor } : null]}
         />
       </View>
       {erro ? <Text style={e.mensagemErro}>{erro}</Text> : null}
@@ -61,19 +63,21 @@ function criarEstilos(cores: Paleta) {
     caixa: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: cores.superficie,
-      borderWidth: 1,
-      borderColor: cores.borda,
-      borderRadius: raio.sm,
-      paddingHorizontal: espaco.md,
+      backgroundColor: cores.superficieAlt,
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+      borderRadius: raio.lg,
+      paddingHorizontal: espaco.lg,
+      paddingVertical: espaco.xs,
     },
     caixaErro: { borderColor: cores.perigo },
     prefixo: { fontSize: 22, fontWeight: '700', color: cores.textoFraco, marginRight: espaco.sm },
     input: {
       flex: 1,
       paddingVertical: espaco.md,
-      fontSize: 28,
-      fontWeight: '700',
+      fontSize: 34,
+      fontWeight: '800',
+      letterSpacing: -0.5,
       color: cores.texto,
     },
     mensagemErro: { color: cores.perigo, fontSize: 12, marginTop: espaco.xs },

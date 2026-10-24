@@ -230,7 +230,7 @@ export default function Ajustes() {
         <Chips itens={OPCOES_TEMA} valor={modo} onChange={definirModo} />
         <Text style={e.ajuda}>
           "Automático" segue o tema claro/escuro que você já configurou no Android.
-          Também dá para alternar rápido pelo ☀/☾ no topo de qualquer aba.
+          Também dá para alternar rápido pelo sol/lua no topo de qualquer aba.
         </Text>
       </Cartao>
 

@@ -14,7 +14,7 @@ import * as eventosRepo from '../../src/repos/eventos';
 import { useMoeda } from '../../src/contexto/PrivacidadeContexto';
 import { formatarData, hojeISO, mascararData, textoParaISO } from '../../src/utils/date';
 import { espaco, PALETA, type Paleta } from '../../src/utils/tema';
-import type { Conta } from '../../src/types';
+import { ehContaComum, type Conta } from '../../src/types';
 
 export default function FormularioEvento() {
   const { cores } = useTema();
@@ -50,8 +50,9 @@ export default function FormularioEvento() {
     (async () => {
       const lista = await contasRepo.listar();
       if (!vivo) return;
-      // Dinheiro para um evento sai de conta do dia a dia, nao de outro evento.
-      const origens = lista.filter((c) => c.tipo !== 'evento');
+      // Dinheiro para um evento sai de conta do dia a dia, nao de outro evento
+      // nem de investimento (para isso existe o resgate).
+      const origens = lista.filter((c) => ehContaComum(c.tipo));
       setContas(origens);
       setContaOrigem(origens[0]?.id ?? null);
 

@@ -238,6 +238,94 @@ export const MIGRATIONS: Migration[] = [
       ALTER TABLE contas_novo RENAME TO contas;
     `,
   },
+  {
+    versao: 9,
+    nome: 'investimentos viram contas; hora nos lancamentos',
+    desligaChavesEstrangeiras: true,
+    sql: `
+      -- Investimento deixa de ser um numero digitado a mao e vira conta, como
+      -- o evento da migration 8: o aporte e uma movimentacao (o dinheiro SAI
+      -- da corrente e ENTRA no investimento) e nao uma despesa. O rendimento
+      -- entra como receita/despesa NA conta de investimento, e todas as
+      -- consultas de KPI ignoram esse tipo de conta -- render nao e salario.
+      CREATE TABLE contas_novo (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome          TEXT    NOT NULL,
+        tipo          TEXT    NOT NULL
+                      CHECK (tipo IN ('corrente','poupanca','cartao','dinheiro','evento','investimento')),
+        saldo_inicial INTEGER NOT NULL DEFAULT 0,
+        ativo         INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0,1)),
+        criado_em     TEXT    NOT NULL DEFAULT (datetime('now')),
+        cor           TEXT    NOT NULL DEFAULT '#546E7A',
+        data_inicio   TEXT,
+        data_fim      TEXT,
+        -- Veio de investimentos ("CDB, Tesouro Selic..."); serve a qualquer conta.
+        observacao    TEXT,
+        CHECK (tipo = 'evento' OR (data_inicio IS NULL AND data_fim IS NULL)),
+        CHECK (data_inicio IS NULL OR data_fim IS NULL OR data_fim >= data_inicio)
+      );
+
+      INSERT INTO contas_novo (id, nome, tipo, saldo_inicial, ativo, criado_em, cor, data_inicio, data_fim)
+      SELECT                   id, nome, tipo, saldo_inicial, ativo, criado_em, cor, data_inicio, data_fim
+      FROM contas;
+
+      -- Ids novos (depois dos das contas): ninguem referenciava investimentos.
+      -- O valor digitado vira o saldo inicial -- era o saldo na ultima conferencia.
+      INSERT INTO contas_novo (nome, tipo, saldo_inicial, ativo, criado_em, cor, observacao)
+      SELECT nome, 'investimento', valor, 1, criado_em, cor, observacao
+      FROM investimentos
+      ORDER BY id;
+
+      DROP TABLE investimentos;
+      DROP TABLE contas;
+      ALTER TABLE contas_novo RENAME TO contas;
+
+      -- 'HH:MM' local, opcional: lancamentos antigos ficam sem hora em vez de
+      -- ganharem uma inventada. A comparacao de texto funciona porque o
+      -- formato tem largura fixa.
+      ALTER TABLE lancamentos ADD COLUMN hora TEXT
+        CHECK (hora IS NULL OR (hora GLOB '[0-2][0-9]:[0-5][0-9]' AND hora < '24:00'));
+    `,
+  },
+  {
+    versao: 10,
+    nome: 'cartao de credito: limite, fatura e parcelamento',
+    sql: `
+      -- Cartao continua sendo conta (tipo 'cartao'): compra e despesa nele, e
+      -- pagar a fatura e movimentacao da corrente PARA o cartao. O saldo do
+      -- cartao e, portanto, menos a divida -- e limite disponivel = limite + saldo.
+      -- So ADD COLUMN: nada de CHECK novo no tipo, entao sem rebuild.
+      ALTER TABLE contas ADD COLUMN limite INTEGER CHECK (limite IS NULL OR limite >= 0);
+      ALTER TABLE contas ADD COLUMN dia_fechamento INTEGER
+        CHECK (dia_fechamento IS NULL OR dia_fechamento BETWEEN 1 AND 31);
+      ALTER TABLE contas ADD COLUMN dia_vencimento INTEGER
+        CHECK (dia_vencimento IS NULL OR dia_vencimento BETWEEN 1 AND 31);
+      -- Fatura que ja estava aberta quando o cartao foi cadastrado (centavos).
+      -- Vem antes de qualquer lancamento, entao so existe como numero.
+      ALTER TABLE contas ADD COLUMN fatura_inicial INTEGER NOT NULL DEFAULT 0
+        CHECK (fatura_inicial >= 0);
+
+      -- Uma compra parcelada: os N lancamentos (um por fatura) apontam para ca.
+      -- Juros em pontos-base ao mes (199 = 1,99% a.m.) para continuar inteiro.
+      CREATE TABLE parcelamentos (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        descricao      TEXT    NOT NULL,
+        valor_original INTEGER NOT NULL CHECK (valor_original > 0),
+        juros_bp       INTEGER NOT NULL DEFAULT 0 CHECK (juros_bp >= 0),
+        vezes          INTEGER NOT NULL CHECK (vezes BETWEEN 2 AND 48),
+        -- Soma das parcelas (com juros). Guardado para a tela nao recalcular.
+        total          INTEGER NOT NULL CHECK (total >= valor_original),
+        criado_em      TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+
+      -- CASCADE: excluir a compra apaga as parcelas juntas -- parcela solta,
+      -- sem a compra, e exatamente o lixo que confunde a fatura.
+      ALTER TABLE lancamentos ADD COLUMN parcelamento_id INTEGER
+        REFERENCES parcelamentos(id) ON DELETE CASCADE;
+      ALTER TABLE lancamentos ADD COLUMN parcela INTEGER CHECK (parcela IS NULL OR parcela >= 1);
+      CREATE INDEX idx_lanc_parcelamento ON lancamentos(parcelamento_id);
+    `,
+  },
 ];
 
 export const VERSAO_ALVO = MIGRATIONS.reduce((max, m) => Math.max(max, m.versao), 0);

@@ -97,7 +97,7 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 | **D09** | **Integridade referencial** | `PRAGMA foreign_keys = ON` em toda abertura de conexão — é OFF por padrão no SQLite e vale por conexão. Sem isso as FKs do schema seriam decorativas. |
 | **D10** | **Exclusão** | Conta com lançamentos: `ON DELETE RESTRICT`, e a UI oferece inativar. Categoria: `ON DELETE SET NULL` — o gasto vira "Sem categoria" e os totais continuam batendo. |
 | **D11** | **Categorias de sistema** | "Ajuste de saldo" nasce com `sistema = 1`: só a cor é editável. Ela sustenta D04; se o usuário pudesse excluí-la, perderia o único caminho previsto para corrigir divergência. |
-| **D12** | **Investimentos** | Tabela própria (`investimentos`), sem FK com `contas`, fora de toda query de saldo. Valor é digitado manualmente pelo usuário a cada conferência de extrato — investimento rende/cai sozinho, não é gerado por lançamento (receita/despesa) como em D03. Pedido explícito do usuário: "não vai contar pro saldo". |
+| **D12** | **Investimentos** *(substituída por D21)* | Tabela própria (`investimentos`), sem FK com `contas`, fora de toda query de saldo. Valor é digitado manualmente pelo usuário a cada conferência de extrato — investimento rende/cai sozinho, não é gerado por lançamento (receita/despesa) como em D03. Pedido explícito do usuário: "não vai contar pro saldo". |
 | **D13** | **Metas** | Uma meta por categoria (`UNIQUE(categoria_id)`), **recorrente** — vale todo mês até ser mudada, não é recadastrada mês a mês. Trade-off aceito: não guarda histórico de "quanto era a meta em março". `ON DELETE CASCADE` com a categoria, diferente de `lancamentos` (D10): meta não tem gasto histórico dependendo dela para preservar. |
 | **D14** | **Movimentação interna** | Um único lançamento com `tipo = 'transferencia'`, `conta_id` = origem e `conta_destino_id` = destino — **não** dois lançamentos espelhados. Um par de linhas poderia ser editado pela metade e deixar o saldo torto para sempre; uma linha só não tem esse estado inválido. Fica fora de receitas, despesas, categorias e do gráfico por dia: mover dinheiro entre contas próprias não é ganho nem gasto (garantido por `CHECK`, e verificado em 6 testes). |
 | **D15** | **Cor em conta e investimento** | Toda entidade que aparece em gráfico tem cor própria escolhida pelo usuário (migrations 6 e 7). Paleta subiu de 12 para 24 tons, organizada por matiz. Alternativa descartada: gerar cor automática por hash do nome — dá cores repetidas e feias em listas pequenas, e o usuário não consegue corrigir. |
@@ -106,6 +106,11 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 | **D18** | **Lembretes** | Notificação **local** agendada no aparelho: sem servidor, sem FCM, o "100% offline" (RNF01) continua valendo. Não é um alarme "repete todo dia" — o app agenda os próximos 7 dias avulsos e **reagenda a cada abertura**, pulando o dia em que já houve lançamento. Assim o lembrete some para quem usa o app e insiste para quem sumiu, sem tarefa em segundo plano. A regra de quando tocar vive em `src/utils/lembretes.ts`, sem dependência nativa, e é testada pelo `verify`. Permissão é pedida ao **ligar** o lembrete, nunca na abertura. |
 | **D19** | **Widgets** | Widget do Android não roda React Native nem enxerga o SQLite. O app grava um instantâneo (`widget-saldo.json`) com saldo e resultado, e o widget só lê — mostrando "atualizado <quando>" para o número velho nunca se passar por atual. Não é segunda fonte de verdade: nada é calculado a partir dele. O widget de atalho não carrega dado nenhum de propósito, então nunca desatualiza. A entrada do app virou `index.js` porque o tratador precisa ser registrado fora do React — o Android chama esse código com o app fechado. |
 | **D20** | **Olhinho (esconder valores)** | O estado fica guardado: esconder é uma decisão sobre o ambiente onde você usa o app, não sobre a sessão. A máscara é de largura fixa (`R$ ••••`) para R$ 12,00 e R$ 1.200.000,00 ficarem idênticos — máscara proporcional ao número entregaria a ordem de grandeza. Escondido, some também o sinal e a cor verde/vermelha, que sozinhos já diriam se o mês fechou no azul. O **widget** respeita o mesmo estado: ele vive na tela inicial do celular, a superfície mais pública que existe. Campo de formulário nunca é mascarado — esconder o valor que a pessoa está digitando não protege nada e impede conferir antes de salvar. |
+| **D21** | **Investimento vira conta** *(substitui D12)* | Desde a migration 9 investimento é conta com `tipo = 'investimento'`, e a tabela `investimentos` deixou de existir (cada linha virou conta, valor como saldo inicial). Motivo: o usuário lançava aporte como despesa na categoria "Investimentos" — o dinheiro saía do saldo, mas inflava os gastos do mês e não aparecia no investido. Agora **aporte é movimentação** (corrente → investimento) e **resgate** é o caminho inverso; "Atualizar valor" lança só a **diferença** como receita/despesa na própria conta (rendimento/desvalorização), separando o que você pôs do que o mercado fez. Continua valendo o pedido original de D12: investimento fica **fora do saldo total** e de **todo KPI do mês** (filtro `FORA_INVESTIMENTO` em resumo, pizza, evolução, por conta e por dia). Escolher a categoria "Investimentos" numa despesa troca o formulário para "Investir". |
+| **D22** | **Hora do lançamento** | Coluna `hora` (`'HH:MM'` local, opcional) na migration 9. Lançamento novo nasce com a hora de agora; os antigos ficam **sem hora** em vez de ganhar uma inventada, e vão para o fim do dia na lista (`NULL` ordena por último em `DESC`). Mesma regra de D08: hora sai dos getters locais, nunca de `toISOString()`. |
+| **D23** | **Seletor de cor livre** | A grade de 24 cores continua sendo o caminho rápido; o último botão abre quadrado de saturação × brilho, barra de matiz e campo hexadecimal, desenhados com `react-native-svg` (sem dependência nova). A saída é sempre `#RRGGBB` (os widgets só aceitam hex). Como a cor agora pode ser qualquer uma, o texto sobre ela (avatar, chip) escolhe branco ou escuro pela **luminância WCAG**. Conversões HSV ↔ hex vivem em `src/utils/cor.ts`, sem import, testadas pelo `verify`. |
+| **D24** | **Repaginada visual (1.4)** | Ícones de traço em SVG (`Icone.tsx`) no lugar dos glifos de texto, que cada Android desenhava com uma fonte diferente. Cantos maiores, sombra suave (`sombra()`, via `elevation` no Android) com borda fina mantida para o tema escuro, campos preenchidos que ganham borda primária no foco, controle segmentado para o tipo do lançamento, cabeçalho na cor do fundo e aba ativa com "pílula" no estilo Material 3. Sem biblioteca de UI nem de ícones: cada uma seria mais uma chance de versão incoerente no SDK 57. |
+| **D25** | **Cartão de crédito** | Cartão continua sendo conta (`tipo = 'cartao'`), agora com `limite`, `dia_fechamento`, `dia_vencimento` e `fatura_inicial` (migration 10). Saldo do cartão = **menos a dívida**, então **disponível = limite + saldo**. Compra é despesa no cartão; **pagar a fatura é movimentação** da conta para o cartão — devolve limite e não conta como gasto de novo (a compra já contou). Despesa na categoria "Cartão"/"Fatura" troca o formulário para essa movimentação. **Parcelado**: uma linha em `parcelamentos` + N despesas, uma por mês, cada uma na sua fatura (`ON DELETE CASCADE` apaga a compra inteira). O limite é comprometido inteiro na compra (como no banco), mas cada mês só soma nas despesas a parcela que cai nele. Juros em pontos-base ao mês, tabela Price; o único cálculo com float é a parcela, arredondada para centavo inteiro (D07). A fatura de uma data e o agrupamento por fatura são funções puras em `src/utils/cartao.ts`, testadas pelo `verify`. No cadastro, "limite disponível" e "fatura atual" vêm do app do banco: o já usado vira saldo inicial negativo. |
 
 ---
 
@@ -136,6 +141,12 @@ glifos de texto — trocar por ícones de verdade é candidato natural à Fase 7
 - [x] **RF26** — Esconder valores com um toque (olhinho), incluindo no widget (D20)
 - [x] **RF25** — Widgets Android: atalho para registrar gasto/receita e widget de saldo com instantâneo (D19)
 - [x] **RF23** — Redesign do Início (degradê no saldo, cores das contas, cartão de investimentos, eventos ativos) e animações leves em todo o app (D17)
+- [x] **RF27** — Data **e hora** em todo lançamento (D22)
+- [x] **RF28** — Investimento como movimentação: aportar, resgatar e atualizar valor com rendimento separado do aportado (D21)
+- [x] **RF29** — Seletor de cor livre para categorias, contas, eventos e investimentos (D23)
+- [x] **RF30** — Repaginada visual: ícones SVG, cartões, campos, botões e abas (D24)
+- [x] **RF31** — Cartão de crédito com limite total/disponível, fechamento, vencimento, fatura atual e próximas faturas (D25)
+- [x] **RF32** — Compra no cartão com categoria, parcelas e juros; pagamento de fatura devolve limite (D25)
 
 ### v2 — evolução (congelado até a Fase 7)
 
@@ -202,6 +213,17 @@ investimentos + cor TEXT NOT NULL DEFAULT '#1E88E5'
 -- migration 8: RECONSTRUCAO de contas, com FKs desligadas (ver abaixo)
 contas        (... tipo aceita 'evento', + data_inicio, data_fim,
                CHECK: datas so em evento; fim >= inicio)
+
+-- migration 9: RECONSTRUCAO de contas de novo (FKs desligadas) (D21, D22)
+contas        (... tipo aceita 'investimento', + observacao)
+              -- cada linha de investimentos vira conta; a tabela e apagada
+lancamentos   + hora TEXT  -- 'HH:MM' local ou NULL
+
+-- migration 10: cartao de credito (D25), so ADD COLUMN
+contas        + limite, dia_fechamento, dia_vencimento, fatura_inicial
+parcelamentos (id, descricao, valor_original, juros_bp, vezes, total, criado_em)
+lancamentos   + parcelamento_id REFERENCES parcelamentos(id) ON DELETE CASCADE,
+              + parcela
 ```
 
 **Sobre a migration 8.** Diferente da 5, a tabela reconstruída (`contas`) é
@@ -229,9 +251,11 @@ O composto `(data, tipo)` existe porque **toda** consulta do dashboard filtra pe
 (`valor >= 0` em investimentos, que aceita zero), `tipo` dentro do domínio, `ativo`
 e `sistema` booleanos.
 
-`user_version` atual: **8**. Backup (RF14/16) inclui as cinco tabelas; um backup
-exportado antes da migration 3 ou 4 não tem `investimentos`/`metas` no JSON — a
-importação trata isso como lista vazia, não como erro. Restaurar valida também que
+`user_version` atual: **10**. Backup (RF14/16) inclui contas, categorias,
+lançamentos, metas e parcelamentos; campo ausente em backup antigo vira lista
+vazia ou valor padrão, não erro. Backup anterior à migration 9 ainda traz
+`investimentos` separado — a importação converte cada um em conta de
+investimento, como a própria migration faz. Restaurar valida também que
 toda meta aponta para uma categoria que existe no próprio arquivo.
 
 ---

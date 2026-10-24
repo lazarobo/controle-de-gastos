@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatarMes, mesAtual, mesesIguais, somarMeses, type Mes } from '../utils/date';
 import { useTema } from '../contexto/TemaContexto';
-import { espaco, raio, type Paleta } from '../utils/tema';
+import { espaco, raio, sombra, type Paleta } from '../utils/tema';
 
 export function SeletorMes({
   mes,
@@ -49,9 +49,10 @@ function criarEstilos(cores: Paleta) {
       alignItems: 'center',
       justifyContent: 'space-between',
       backgroundColor: cores.superficie,
-      borderRadius: raio.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: cores.borda,
+      borderRadius: raio.lg,
+      ...sombra(cores, 1),
       paddingHorizontal: espaco.sm,
       paddingVertical: espaco.sm,
     },

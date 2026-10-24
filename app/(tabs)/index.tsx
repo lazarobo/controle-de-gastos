@@ -6,10 +6,12 @@ import { Aparecer, NumeroAnimado, Tocavel } from '../../src/components/animacao'
 import { Avatar } from '../../src/components/Avatar';
 import { CartaoDestaque } from '../../src/components/CartaoDestaque';
 import { CartaoEvento } from '../../src/components/CartaoEvento';
+import { Fab } from '../../src/components/Fab';
+import { Icone } from '../../src/components/Icone';
 import { SeletorMes } from '../../src/components/SeletorMes';
 import { Cartao, Carregando, Titulo, Vazio } from '../../src/components/ui';
 import { useConsulta } from '../../src/hooks/useConsulta';
-import { usePrivacidade } from '../../src/contexto/PrivacidadeContexto';
+import { useMoeda, usePrivacidade } from '../../src/contexto/PrivacidadeContexto';
 import { useTema } from '../../src/contexto/TemaContexto';
 import * as contasRepo from '../../src/repos/contas';
 import * as eventosRepo from '../../src/repos/eventos';
@@ -18,7 +20,7 @@ import * as lancamentosRepo from '../../src/repos/lancamentos';
 import { atualizarWidgetSaldo } from '../../src/widgets/atualizar';
 import { mesAtual, type Mes } from '../../src/utils/date';
 import { espaco, raio, type Paleta } from '../../src/utils/tema';
-import type { EventoResumo, ResumoMes, SaldoConta } from '../../src/types';
+import { ehContaComum, type EventoResumo, type ResumoMes, type SaldoConta } from '../../src/types';
 
 interface DadosPainel {
   saldoTotal: number;
@@ -40,25 +42,25 @@ export default function Painel() {
   const { cores } = useTema();
   const { ocultos } = usePrivacidade();
   const e = useMemo(() => criarEstilos(cores), [cores]);
+  const formatarMoeda = useMoeda();
   const [mes, setMes] = useState<Mes>(mesAtual);
   const router = useRouter();
 
   const { dados, carregando } = useConsulta<DadosPainel>(async () => {
-    const [saldoTotal, resumo, saldos, eventos, investido, investimentos] = await Promise.all([
+    const [saldoTotal, resumo, saldos, eventos, investimentos] = await Promise.all([
       contasRepo.saldoTotal(),
       lancamentosRepo.resumoMes(mes),
       contasRepo.saldos(),
       eventosRepo.listar(),
-      investimentosRepo.total(),
       investimentosRepo.listar(),
     ]);
     return {
       saldoTotal,
       resumo,
-      // Eventos tambem sao contas, mas ganham secao propria logo abaixo.
-      contas: saldos.filter((s) => s.conta.tipo !== 'evento'),
+      // Eventos e investimentos tambem sao contas, mas ganham secao propria.
+      contas: saldos.filter((s) => ehContaComum(s.conta.tipo)),
       eventos,
-      investido,
+      investido: investimentos.reduce((soma, i) => soma + i.valor, 0),
       posicoes: investimentos.length,
     };
   }, [mes.ano, mes.mes]);
@@ -132,14 +134,20 @@ export default function Painel() {
                     <Tocavel
                       key={conta.id}
                       style={e.linhaConta}
-                      onPress={() => router.push(`/conta/${conta.id}`)}
+                      onPress={() =>
+                        router.push(conta.tipo === 'cartao' ? `/cartao/${conta.id}` : `/conta/${conta.id}`)
+                      }
                     >
                       <Avatar nome={conta.nome} cor={conta.cor} />
                       <View style={{ flex: 1 }}>
                         <Text style={e.nomeConta} numberOfLines={1}>
                           {conta.nome}
                         </Text>
-                        <Text style={e.tipoConta}>{ROTULO_TIPO[conta.tipo] ?? conta.tipo}</Text>
+                        <Text style={e.tipoConta}>
+                          {conta.tipo === 'cartao' && conta.limite
+                            ? `disponível ${formatarMoeda(conta.limite + saldo)}`
+                            : ROTULO_TIPO[conta.tipo] ?? conta.tipo}
+                        </Text>
                       </View>
                       <NumeroAnimado
                         centavos={saldo}
@@ -163,14 +171,14 @@ export default function Painel() {
                 ]}
               >
                 <View style={[e.iconeInvestimento, { backgroundColor: cores.investimento }]}>
-                  <Text style={e.iconeTexto}>▲</Text>
+                  <Icone nome="investir" cor="#FFFFFF" tamanho={20} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={e.rotulo}>Investido</Text>
                   <Text style={e.explicacao}>
                     {dados.posicoes === 0
                       ? 'toque para cadastrar'
-                      : `${dados.posicoes} ${dados.posicoes === 1 ? 'posição' : 'posições'} · fora do saldo`}
+                      : `patrimônio ${formatarMoeda(dados.saldoTotal + dados.investido)}`}
                   </Text>
                 </View>
                 <NumeroAnimado
@@ -202,13 +210,7 @@ export default function Painel() {
       </ScrollView>
 
       {/* RNF02: 1 toque no botao, digitar o valor, 1 toque em salvar. */}
-      <Tocavel
-        style={e.fab}
-        onPress={() => router.push('/lancamento/novo')}
-        accessibilityLabel="Registrar gasto"
-      >
-        <Text style={e.fabTexto}>+</Text>
-      </Tocavel>
+      <Fab onPress={() => router.push('/lancamento/novo')} rotulo="Registrar gasto" />
     </View>
   );
 }
@@ -257,14 +259,6 @@ function criarEstilos(cores: Paleta) {
       gap: espaco.md,
       paddingVertical: espaco.sm,
     },
-    avatar: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    avatarLetra: { fontSize: 16, fontWeight: '800' },
     nomeConta: { fontSize: 15, fontWeight: '600', color: cores.texto },
     tipoConta: { fontSize: 11, color: cores.textoFraco, marginTop: 1 },
     valorConta: { fontSize: 15, fontWeight: '700' },
@@ -272,18 +266,17 @@ function criarEstilos(cores: Paleta) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: espaco.md,
-      borderRadius: raio.md,
+      borderRadius: raio.lg,
       borderWidth: 1,
       padding: espaco.lg,
     },
     iconeInvestimento: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
+      width: 42,
+      height: 42,
+      borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    iconeTexto: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
     valorInvestido: { fontSize: 18, fontWeight: '800' },
     secaoEventos: { gap: espaco.sm },
     cabecalhoSecao: {
@@ -292,18 +285,5 @@ function criarEstilos(cores: Paleta) {
       justifyContent: 'space-between',
     },
     verTodos: { color: cores.primaria, fontSize: 13, fontWeight: '700' },
-    fab: {
-      position: 'absolute',
-      right: espaco.lg,
-      bottom: espaco.lg,
-      width: 60,
-      height: 60,
-      borderRadius: 30,
-      backgroundColor: cores.primaria,
-      alignItems: 'center',
-      justifyContent: 'center',
-      elevation: 6,
-    },
-    fabTexto: { color: '#FFF', fontSize: 34, lineHeight: 38, fontWeight: '300' },
   });
 }

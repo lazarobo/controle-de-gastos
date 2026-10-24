@@ -8,7 +8,7 @@ import { Carregando, Vazio } from '../src/components/ui';
 import { useConsulta } from '../src/hooks/useConsulta';
 import { useTema } from '../src/contexto/TemaContexto';
 import * as categoriasRepo from '../src/repos/categorias';
-import { espaco, raio, type Paleta } from '../src/utils/tema';
+import { espaco, raio, sombra, type Paleta } from '../src/utils/tema';
 import type { Categoria } from '../src/types';
 
 export default function ListaCategorias() {
@@ -80,9 +80,10 @@ function criarEstilos(cores: Paleta) {
       alignItems: 'center',
       gap: espaco.md,
       backgroundColor: cores.superficie,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: cores.borda,
-      borderRadius: raio.md,
+      borderRadius: raio.lg,
+      ...sombra(cores, 1),
       padding: espaco.md,
       marginBottom: espaco.sm,
     },

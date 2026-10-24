@@ -4,7 +4,7 @@ import { BarraProgresso, Tocavel } from './animacao';
 import { useTema } from '../contexto/TemaContexto';
 import { useMoeda } from '../contexto/PrivacidadeContexto';
 import { formatarData } from '../utils/date';
-import { espaco, raio, type Paleta } from '../utils/tema';
+import { espaco, raio, sombra, type Paleta } from '../utils/tema';
 import type { EventoResumo } from '../types';
 
 /** Cartao de evento com saldo e barra de gasto. Usado no Inicio e em Eventos. */
@@ -62,9 +62,10 @@ function criarEstilos(cores: Paleta) {
     cartao: {
       flexDirection: 'row',
       backgroundColor: cores.superficie,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: cores.borda,
-      borderRadius: raio.md,
+      borderRadius: raio.lg,
+      ...sombra(cores, 1),
       overflow: 'hidden',
     },
     encerrado: { opacity: 0.6 },

@@ -71,9 +71,12 @@ function ConteudoRaiz() {
       <StatusBar style={escuro ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: cores.superficie },
+          // Cabecalho na cor do fundo e sem sombra: a tela parece uma folha so,
+          // e os cartoes e que ganham relevo.
+          headerStyle: { backgroundColor: cores.fundo },
+          headerShadowVisible: false,
           headerTintColor: cores.texto,
-          headerTitleStyle: { fontWeight: '700' },
+          headerTitleStyle: { fontWeight: '800' },
           contentStyle: { backgroundColor: cores.fundo },
         }}
       >
@@ -85,6 +88,7 @@ function ConteudoRaiz() {
         <Stack.Screen name="meta/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="evento/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="contas" options={{ title: 'Contas' }} />
+        <Stack.Screen name="cartao/[id]" options={{ title: 'Cartão' }} />
         <Stack.Screen name="categorias" options={{ title: 'Categorias' }} />
         <Stack.Screen name="metas" options={{ title: 'Metas' }} />
         <Stack.Screen name="eventos" options={{ title: 'Eventos' }} />

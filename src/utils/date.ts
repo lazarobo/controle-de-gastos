@@ -129,6 +129,21 @@ export function lerHora(texto: string): { hora: number; minuto: number } | null 
   return { hora, minuto };
 }
 
+/** Hora local 'HH:MM' de um Date (padrao: agora). Mesmo motivo de dataParaISO: nada de UTC. */
+export function horaDe(d: Date = new Date()): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/**
+ * Texto do campo de hora -> 'HH:MM' para o banco. Vazio vira null (hora e
+ * opcional); texto preenchido que nao e horario valido devolve undefined, para
+ * o formulario acusar o erro em vez de gravar silenciosamente sem hora.
+ */
+export function textoParaHora(texto: string): string | null | undefined {
+  if (!texto.trim()) return null;
+  return lerHora(texto) ? texto : undefined;
+}
+
 export function textoParaISO(texto: string): string | null {
   const m = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!m) return null;

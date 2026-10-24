@@ -35,50 +35,54 @@ export interface Paleta {
   sobreDestaque: Cor;
   /** Acento de investimentos: roxo, distinto de receita/despesa/primaria. */
   investimento: Cor;
+  /** Cor da sombra dos cartoes (elevation no Android). */
+  sombra: Cor;
 }
 
 export const paletaClara: Paleta = {
-  fundo: '#F4F6F8',
+  fundo: '#F3F5FA',
   superficie: '#FFFFFF',
-  superficieAlt: '#F0F2F5',
-  borda: '#E2E6EA',
-  texto: '#12232E',
-  textoFraco: '#6B7A88',
-  primaria: '#1E6FD9',
-  primariaFraca: '#E8F1FD',
-  receita: '#1B8A3F',
-  despesa: '#C62828',
+  superficieAlt: '#EEF1F6',
+  borda: '#E3E7EF',
+  texto: '#101828',
+  textoFraco: '#667085',
+  primaria: '#2563EB',
+  primariaFraca: '#E6EEFD',
+  receita: '#16A34A',
+  despesa: '#DC2626',
   /** Movimentacao interna: nem ganho nem gasto, entao nem verde nem vermelho. */
-  transferencia: '#5E6C7A',
-  perigo: '#C62828',
-  neutra: '#9E9E9E',
+  transferencia: '#64748B',
+  perigo: '#DC2626',
+  neutra: '#98A2B3',
   /** Degrade do cartao de saldo no Inicio (topo-esquerda -> base-direita). */
-  gradienteA: '#1E6FD9',
-  gradienteB: '#5B3FD6',
+  gradienteA: '#2563EB',
+  gradienteB: '#6D3FE0',
   /** Texto sobre o degrade: branco nos dois temas, o fundo e sempre escuro. */
   sobreDestaque: '#FFFFFF',
   /** Acento de investimentos: roxo, distinto de receita/despesa/primaria. */
-  investimento: '#7B4DFF',
+  investimento: '#7C4DFF',
+  sombra: '#1D2939',
 };
 
 export const paletaEscura: Paleta = {
-  fundo: '#0F1620',
-  superficie: '#1A2430',
-  superficieAlt: '#212D3B',
-  borda: '#2C3A48',
-  texto: '#EDF1F5',
-  textoFraco: '#8A99A8',
-  primaria: '#5B9BF0',
-  primariaFraca: '#1D3352',
-  receita: '#4CAF6E',
-  despesa: '#E5695F',
-  transferencia: '#8A99A8',
-  perigo: '#E5695F',
+  fundo: '#0B111A',
+  superficie: '#151D29',
+  superficieAlt: '#1D2735',
+  borda: '#263243',
+  texto: '#F2F4F7',
+  textoFraco: '#94A3B8',
+  primaria: '#5B8DEF',
+  primariaFraca: '#1A2B4A',
+  receita: '#4ADE80',
+  despesa: '#F87171',
+  transferencia: '#94A3B8',
+  perigo: '#F87171',
   neutra: '#7A8794',
-  gradienteA: '#2A5FB8',
-  gradienteB: '#4B2FA8',
+  gradienteA: '#2F5FD0',
+  gradienteB: '#5A32B8',
   sobreDestaque: '#FFFFFF',
-  investimento: '#A58BFF',
+  investimento: '#A78BFA',
+  sombra: '#000000',
 };
 
 export const espaco = {
@@ -89,11 +93,27 @@ export const espaco = {
   xl: 24,
 };
 
+/** Cantos mais redondos desde a 1.4: cartao 20, campo/botao 14, chip pilula. */
 export const raio = {
-  sm: 8,
-  md: 12,
-  lg: 16,
+  sm: 10,
+  md: 14,
+  lg: 20,
 };
+
+/**
+ * Sombra suave de cartao. No Android quem desenha e `elevation` (as props
+ * shadow* sao do iOS); no tema escuro a sombra quase nao aparece, e por isso
+ * os cartoes mantem a borda fina tambem.
+ */
+export function sombra(cores: Paleta, nivel: 1 | 2 | 3 = 1) {
+  return {
+    shadowColor: cores.sombra,
+    shadowOpacity: 0.06 * nivel,
+    shadowRadius: 4 * nivel,
+    shadowOffset: { width: 0, height: nivel },
+    elevation: nivel * 2,
+  };
+}
 
 /**
  * Paleta oferecida ao criar categoria e conta. Nao muda com o tema: a cor e

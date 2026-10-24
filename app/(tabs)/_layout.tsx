@@ -1,11 +1,30 @@
-import { Pressable, Text, View, type ColorValue } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Tabs } from 'expo-router';
+import { Icone, type NomeIcone } from '../../src/components/Icone';
 import { usePrivacidade } from '../../src/contexto/PrivacidadeContexto';
 import { useTema } from '../../src/contexto/TemaContexto';
 import { espaco } from '../../src/utils/tema';
 
-function Icone({ glifo, cor }: { glifo: string; cor: ColorValue }) {
-  return <Text style={{ fontSize: 20, color: cor }}>{glifo}</Text>;
+/**
+ * Icone da aba: a aba ativa ganha uma "pilula" de fundo na cor primaria fraca,
+ * no estilo Material 3 -- da para saber onde se esta sem ler o rotulo.
+ */
+function IconeAba({ nome, cor, ativa }: { nome: NomeIcone; cor: string; ativa: boolean }) {
+  const { cores } = useTema();
+  return (
+    <View
+      style={{
+        width: 52,
+        height: 30,
+        borderRadius: 15,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: ativa ? cores.primariaFraca : 'transparent',
+      }}
+    >
+      <Icone nome={nome} cor={cor} tamanho={21} />
+    </View>
+  );
 }
 
 /**
@@ -23,7 +42,7 @@ function BotaoTema() {
       style={{ paddingHorizontal: espaco.md }}
       accessibilityLabel={escuro ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
     >
-      <Text style={{ fontSize: 20, color: cores.texto }}>{escuro ? '☾' : '☀'}</Text>
+      <Icone nome={escuro ? 'lua' : 'sol'} cor={cores.texto} tamanho={21} />
     </Pressable>
   );
 }
@@ -43,7 +62,7 @@ function BotaoOlho() {
       style={{ paddingHorizontal: espaco.sm }}
       accessibilityLabel={ocultos ? 'Mostrar valores' : 'Esconder valores'}
     >
-      <Text style={{ fontSize: 19, color: cores.texto }}>{ocultos ? '⊘' : '◉'}</Text>
+      <Icone nome={ocultos ? 'olhoFechado' : 'olho'} cor={cores.texto} tamanho={21} />
     </Pressable>
   );
 }
@@ -55,10 +74,20 @@ export default function LayoutAbas() {
       screenOptions={{
         tabBarActiveTintColor: cores.primaria,
         tabBarInactiveTintColor: cores.textoFraco,
-        headerStyle: { backgroundColor: cores.superficie },
-        headerTitleStyle: { fontWeight: '700', color: cores.texto },
+        // Cabecalho da cor do fundo e sem sombra: o titulo flutua sobre a tela.
+        headerStyle: { backgroundColor: cores.fundo },
+        headerShadowVisible: false,
+        headerTitleStyle: { fontWeight: '800', fontSize: 20, color: cores.texto },
         headerTintColor: cores.texto,
-        tabBarStyle: { backgroundColor: cores.superficie, borderTopColor: cores.borda },
+        tabBarStyle: {
+          backgroundColor: cores.superficie,
+          borderTopWidth: 0,
+          elevation: 12,
+          // Sem `height` fixo: a biblioteca soma a area da barra de gestos do
+          // Android, e uma altura fixa espremeria os icones contra ela.
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
         sceneStyle: { backgroundColor: cores.fundo },
         // Troca de aba desliza em vez de piscar: o jeito mais barato de o app
         // inteiro parecer menos estatico, sem tocar em nenhuma tela.
@@ -75,35 +104,45 @@ export default function LayoutAbas() {
         name="index"
         options={{
           title: 'Início',
-          tabBarIcon: ({ color }) => <Icone glifo="◉" cor={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <IconeAba nome="inicio" cor={String(color)} ativa={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="lancamentos"
         options={{
           title: 'Lançamentos',
-          tabBarIcon: ({ color }) => <Icone glifo="≡" cor={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <IconeAba nome="lista" cor={String(color)} ativa={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="relatorios"
         options={{
           title: 'Relatórios',
-          tabBarIcon: ({ color }) => <Icone glifo="◑" cor={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <IconeAba nome="relatorio" cor={String(color)} ativa={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="investimentos"
         options={{
           title: 'Investir',
-          tabBarIcon: ({ color }) => <Icone glifo="▲" cor={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <IconeAba nome="investir" cor={String(color)} ativa={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="ajustes"
         options={{
           title: 'Ajustes',
-          tabBarIcon: ({ color }) => <Icone glifo="⚙" cor={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <IconeAba nome="ajustes" cor={String(color)} ativa={focused} />
+          ),
         }}
       />
     </Tabs>
